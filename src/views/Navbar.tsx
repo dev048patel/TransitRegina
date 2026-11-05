@@ -30,7 +30,6 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
     const saved = useSavedDestinationsController();
     const tplan = useTripScheduleController();
     const weplan = useWeeklyPlannerController();
-    const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
     // Mutual panel exclusion helpers
     const openSaved = () => { tplan.handleClose(); weplan.handleClose(); saved.handleOpen(); };
@@ -46,6 +45,7 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                     <img
                         src={logo}
                         alt="Transit Regina"
+                        className="navbar-logo"
                         style={{
                             width: '36px',
                             height: '36px',
@@ -72,7 +72,7 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                         </svg>
                         <input
                             type="text"
-                            placeholder="Search for places..."
+                            placeholder="Search places"
                             value={value}
                             onChange={handleInput}
                             onFocus={handleFocus}
@@ -323,13 +323,60 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                     </Link>
                 </div>
 
-                {/* Mobile hamburger + profile — visible only on mobile */}
+                {/* Mobile actions — every icon on the bar, no menu */}
                 <div className="navbar-mobile-actions">
+                    {/* Route picker (mobile): a round chip; the native picker opens over it */}
+                    {routes && onRouteSelect && (
+                        <label
+                            className="navbar-chip"
+                            title="Select route"
+                            style={{
+                                position: 'relative',
+                                backgroundColor: selectedRoute ? 'var(--t-primary)' : 'var(--t-chip)',
+                                color: selectedRoute ? 'white' : '#5f6368',
+                                fontSize: '12px', fontWeight: 700,
+                            }}
+                        >
+                            {selectedRoute ?? (
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <rect x="4" y="3" width="16" height="15" rx="3" /><line x1="4" y1="11" x2="20" y2="11" />
+                                    <circle cx="8" cy="15" r="1" /><circle cx="16" cy="15" r="1" /><line x1="7" y1="18" x2="7" y2="21" /><line x1="17" y1="18" x2="17" y2="21" />
+                                </svg>
+                            )}
+                            <select
+                                aria-label="Select route"
+                                value={selectedRoute || ''}
+                                onChange={(e) => onRouteSelect(e.target.value || null)}
+                                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', fontSize: '16px' }}
+                            >
+                                <option value="">{selectedRoute ? 'All routes (clear)' : 'Select route'}</option>
+                                {[...routes]
+                                    .sort((a, b) => parseInt(a.ROUTE_NUM) - parseInt(b.ROUTE_NUM))
+                                    .map(route => (
+                                        <option key={route.ROUTE_ID} value={route.ROUTE_NUM}>
+                                            Route {route.ROUTE_NUM} — {route.ROUTE_NAME}
+                                        </option>
+                                    ))
+                                }
+                            </select>
+                        </label>
+                    )}
+
+                    {/* Admin (mobile) */}
+                    {isAdmin && (
+                        <Link to="/admin" className="navbar-chip" title="Admin dashboard" aria-label="Admin dashboard" style={{ backgroundColor: '#003DA5', color: 'white' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+                                <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+                            </svg>
+                        </Link>
+                    )}
+
                     {/* Weekly Commute Button (mobile) */}
                     {hasFeature('weekly_planner') && <div
                         onClick={weplan.isOpen ? weplan.handleClose : openWeplan}
                         style={{
-                            width: '32px', height: '32px', borderRadius: '50%',
+                            width: 'var(--nav-chip)', height: 'var(--nav-chip)', borderRadius: '50%',
                             backgroundColor: weplan.isOpen ? 'var(--t-accent-soft)' : 'var(--t-chip)',
                             border: weplan.isOpen ? '2px solid var(--t-accent)' : '2px solid transparent',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -346,7 +393,7 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                     {hasFeature('trip_planner') && <div
                         onClick={tplan.isOpen ? tplan.handleClose : openTplan}
                         style={{
-                            width: '32px', height: '32px', borderRadius: '50%',
+                            width: 'var(--nav-chip)', height: 'var(--nav-chip)', borderRadius: '50%',
                             backgroundColor: tplan.isOpen ? 'var(--t-accent-soft)' : 'var(--t-chip)',
                             border: tplan.isOpen ? '2px solid var(--t-accent)' : '2px solid transparent',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -364,7 +411,7 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                     {hasFeature('saved_locations') && <div
                         onClick={saved.isOpen ? saved.handleClose : openSaved}
                         style={{
-                            width: '32px', height: '32px', borderRadius: '50%',
+                            width: 'var(--nav-chip)', height: 'var(--nav-chip)', borderRadius: '50%',
                             backgroundColor: saved.isOpen ? 'var(--t-accent-soft)' : 'var(--t-chip)',
                             border: saved.isOpen ? '2px solid var(--t-accent)' : '2px solid transparent',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -379,7 +426,7 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
 
                     <Link to="/profile" style={{ textDecoration: 'none', flexShrink: 0 }}>
                         <div style={{
-                            width: '32px', height: '32px', borderRadius: '50%',
+                            width: 'var(--nav-chip)', height: 'var(--nav-chip)', borderRadius: '50%',
                             backgroundColor: 'var(--t-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                             color: 'white',
                         }}>
@@ -389,91 +436,8 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                             </svg>
                         </div>
                     </Link>
-                    <button
-                        className="navbar-hamburger"
-                        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                        aria-label="Toggle menu"
-                    >
-                        {mobileMenuOpen ? (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2.5" strokeLinecap="round">
-                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                            </svg>
-                        ) : (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2.5" strokeLinecap="round">
-                                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-                            </svg>
-                        )}
-                    </button>
                 </div>
             </div>
-
-            {/* Mobile dropdown menu */}
-            {mobileMenuOpen && (
-                <div className="navbar-mobile-menu">
-                    {/* Route Selector — full width on mobile */}
-                    {routes && onRouteSelect && (
-                        <div style={{ position: 'relative' }}>
-                            <select
-                                value={selectedRoute || ''}
-                                onChange={(e) => { onRouteSelect(e.target.value || null); setMobileMenuOpen(false); }}
-                                style={{
-                                    appearance: 'none', WebkitAppearance: 'none', width: '100%',
-                                    padding: '10px 34px 10px 14px',
-                                    backgroundColor: selectedRoute ? 'var(--t-primary-soft)' : 'var(--t-chip)',
-                                    border: selectedRoute ? '2px solid var(--t-primary)' : '1px solid #dadce0',
-                                    borderRadius: '12px', fontSize: '14px', fontWeight: '500',
-                                    color: selectedRoute ? 'var(--t-primary)' : '#5f6368', cursor: 'pointer', outline: 'none',
-                                }}
-                            >
-                                <option value="">🚌 Select Route</option>
-                                {[...routes]
-                                    .sort((a, b) => parseInt(a.ROUTE_NUM) - parseInt(b.ROUTE_NUM))
-                                    .map(route => (
-                                        <option key={route.ROUTE_ID} value={route.ROUTE_NUM}>
-                                            Route {route.ROUTE_NUM} — {route.ROUTE_NAME}
-                                        </option>
-                                    ))
-                                }
-                            </select>
-                            {selectedRoute && (
-                                <button
-                                    onClick={() => onRouteSelect(null)}
-                                    style={{
-                                        position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
-                                        width: '22px', height: '22px', borderRadius: '50%', border: 'none',
-                                        backgroundColor: 'var(--t-primary)', color: 'white', cursor: 'pointer',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontSize: '12px', fontWeight: '700', padding: 0,
-                                    }}
-                                >✕</button>
-                            )}
-                            {!selectedRoute && (
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                                    style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                                    <polyline points="6 9 12 15 18 9" />
-                                </svg>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Admin link */}
-                    {isAdmin && (
-                        <Link to="/admin" style={{ textDecoration: 'none' }} onClick={() => setMobileMenuOpen(false)}>
-                            <div style={{
-                                display: 'flex', alignItems: 'center', gap: '8px',
-                                padding: '10px 14px', backgroundColor: '#003DA5', color: 'white',
-                                borderRadius: '12px', fontSize: '14px', fontWeight: '600',
-                            }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
-                                    <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
-                                </svg>
-                                Admin Dashboard
-                            </div>
-                        </Link>
-                    )}
-                </div>
-            )}
 
             {/* Weekly Commute Panel */}
             {weplan.isOpen && <WeeklyPlannerPanel ctrl={weplan} />}
@@ -492,6 +456,7 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                 }
 
                 .navbar-root {
+                    --nav-chip: 30px;
                     position: fixed;
                     top: 0; left: 0; right: 0;
                     background-color: var(--t-surface);
@@ -523,41 +488,24 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                     flex-shrink: 0;
                 }
 
-                .navbar-hamburger {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    width: 36px; height: 36px;
-                    border: none;
-                    background: #f1f3f4;
-                    border-radius: 10px;
-                    cursor: pointer;
-                    transition: background 0.2s;
-                }
-                .navbar-hamburger:active { background: #e0e0e0; }
-
-                .navbar-mobile-menu {
-                    display: none;
-                    flex-direction: column;
-                    gap: 8px;
-                    padding: 8px 16px 14px;
-                    border-top: 1px solid #f1f3f4;
-                    background: white;
-                    animation: slideDown 0.2s ease-out;
-                }
-
-                @keyframes slideDown {
-                    from { opacity: 0; transform: translateY(-8px); }
-                    to { opacity: 1; transform: translateY(0); }
+                .navbar-chip {
+                    width: var(--nav-chip); height: var(--nav-chip);
+                    border-radius: 50%;
+                    display: flex; align-items: center; justify-content: center;
+                    flex-shrink: 0; cursor: pointer; text-decoration: none; overflow: hidden;
                 }
 
                 /* ── Mobile: <= 640px ── */
                 @media (max-width: 640px) {
                     .navbar-desktop-actions { display: none; }
-                    .navbar-mobile-actions { display: flex; }
-                    .navbar-mobile-menu { display: flex; }
-                    .navbar-search { margin: 0 6px !important; }
-                    .navbar-top-row { height: 48px; padding: 0 10px; }
+                    .navbar-mobile-actions { display: flex; gap: 4px; }
+                    /* Search shrinks to make room for the icons; the text stays 16px so phones don't zoom in */
+                    .navbar-search { margin: 0 2px !important; min-width: 0; }
+                    .navbar-search > div { padding: 6px 10px !important; gap: 6px !important; }
+                    .navbar-search input { min-width: 0; }
+                    .navbar-search input::placeholder { font-size: 14px; }
+                    .navbar-logo { width: 30px !important; height: 30px !important; border-radius: 8px !important; }
+                    .navbar-top-row { height: 48px; padding: 0 8px; gap: 6px; }
                 }
             `}</style>
         </nav>

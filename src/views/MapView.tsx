@@ -65,6 +65,10 @@ export const MapView: React.FC<MapViewProps> = ({
   const stopIcon = stopIconFor(character);
   const placePin = destinationPinFor(character);
 
+  // Phones and tablets: bigger stops to hit with a finger, and a tap on the map doesn't pick a destination
+  const isTouch = useMemo(() => window.matchMedia('(pointer: coarse)').matches, []);
+  const stopScale = isTouch ? 1.5 : 1;
+
   // Theme the map screens to the chosen character; other pages keep the original colours
   useEffect(() => {
     applyCharacterTheme(character);
@@ -105,8 +109,10 @@ export const MapView: React.FC<MapViewProps> = ({
     const placeId = (e as google.maps.IconMouseEvent).placeId;
     // Swap Google's own place popup for the character bubble
     if (placeId) e.stop();
+    // On a small screen taps are mostly panning: never open a popup, destinations come from the search box
+    if (isTouch) return;
     // A tap on empty map while the bubble is open just dismisses it
-    else if (showInfoWindow) { setShowInfoWindow(false); return; }
+    if (!placeId && showInfoWindow) { setShowInfoWindow(false); return; }
 
     const picked = await handleMapPlacePick({ lat: e.latLng.lat(), lng: e.latLng.lng() }, placeId || undefined);
     if (!picked) return;
@@ -188,7 +194,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const routeColor = currentRoute?.ROUTE_COLO ? `#${currentRoute.ROUTE_COLO}` : '#FF0000';
 
   return (
-    <div className="relative h-screen w-full">
+    <div className="relative h-[100dvh] w-full">
       {/* Hide Navbar when tracking is active for clean view */}
       {!activeTracking && (
         <Navbar
@@ -269,8 +275,8 @@ export const MapView: React.FC<MapViewProps> = ({
             title={`${stop.STOP_NAME} (#${stop.STOP_ID})`}
             icon={{
               url: stopIcon.url,
-              scaledSize: isLoaded ? new google.maps.Size(stopIcon.width, stopIcon.height) : undefined,
-              anchor: isLoaded ? new google.maps.Point(stopIcon.anchorX, stopIcon.anchorY) : undefined,
+              scaledSize: isLoaded ? new google.maps.Size(stopIcon.width * stopScale, stopIcon.height * stopScale) : undefined,
+              anchor: isLoaded ? new google.maps.Point(stopIcon.anchorX * stopScale, stopIcon.anchorY * stopScale) : undefined,
             }}
             onClick={() => handleStopClick(stop)}
           />

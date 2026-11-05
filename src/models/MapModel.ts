@@ -61,8 +61,9 @@ export const MapModel = {
 
   // CSS Styles for the map container
   containerStyle: {
-    width: '100vw',
-    height: '100vh',
+    // Fills MapView's wrapper, which is sized to the visible screen (100dvh) so phones don't hide the bottom
+    width: '100%',
+    height: '100%',
   } as React.CSSProperties,
 
   libraries: ['places'] as ("places" | "drawing" | "geometry" | "visualization")[],

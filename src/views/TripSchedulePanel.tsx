@@ -174,7 +174,7 @@ export default function TripSchedulePanel({ ctrl, onPreviewLocation }: TripSched
             <div className="t-panel t-drawer" style={{
                 position: 'fixed', top: '52px', right: 0,
                 width: 'min(340px, 100vw)',
-                height: 'calc(100vh - 52px)',
+                height: 'calc(100dvh - 52px)',
                 backgroundColor: 'var(--t-surface)',
                 boxShadow: '-4px 0 20px rgba(0,0,0,0.12)',
                 zIndex: 1100,

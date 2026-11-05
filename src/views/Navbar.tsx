@@ -36,6 +36,17 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
     const openTplan = () => { saved.handleClose(); weplan.handleClose(); tplan.handleOpen(); };
     const openWeplan = () => { saved.handleClose(); tplan.handleClose(); weplan.handleOpen(); };
 
+    // Mobile: the three planner panels sit in a menu; picking one closes the menu
+    const [menuOpen, setMenuOpen] = React.useState(false);
+    const menuItems = [
+        hasFeature('trip_planner') && { key: 'tplan', label: 'Trip Planner', open: tplan.isOpen, toggle: tplan.isOpen ? tplan.handleClose : openTplan,
+            icon: <><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></> },
+        hasFeature('saved_locations') && { key: 'saved', label: 'Saved Locations', open: saved.isOpen, toggle: saved.isOpen ? saved.handleClose : openSaved,
+            icon: <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" /> },
+        hasFeature('weekly_planner') && { key: 'weplan', label: 'Weekly Commute', open: weplan.isOpen, toggle: weplan.isOpen ? weplan.handleClose : openWeplan,
+            icon: <><path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" /></> },
+    ].filter(Boolean) as { key: string; label: string; open: boolean; toggle: () => void; icon: React.ReactNode }[];
+
     return (
         <nav className="navbar-root">
             {/* Top row — always visible */}
@@ -323,7 +334,7 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                     </Link>
                 </div>
 
-                {/* Mobile actions — every icon on the bar, no menu */}
+                {/* Mobile actions — route, admin and profile on the bar; the planners in the menu */}
                 <div className="navbar-mobile-actions">
                     {/* Route picker (mobile): a round chip; the native picker opens over it */}
                     {routes && onRouteSelect && (
@@ -372,58 +383,6 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                         </Link>
                     )}
 
-                    {/* Weekly Commute Button (mobile) */}
-                    {hasFeature('weekly_planner') && <div
-                        onClick={weplan.isOpen ? weplan.handleClose : openWeplan}
-                        style={{
-                            width: 'var(--nav-chip)', height: 'var(--nav-chip)', borderRadius: '50%',
-                            backgroundColor: weplan.isOpen ? 'var(--t-accent-soft)' : 'var(--t-chip)',
-                            border: weplan.isOpen ? '2px solid var(--t-accent)' : '2px solid transparent',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: 'pointer', color: weplan.isOpen ? 'var(--t-accent)' : '#5f6368', flexShrink: 0,
-                        }}
-                    >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" />
-                            <path d="M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" />
-                        </svg>
-                    </div>}
-
-                    {/* Trip Planner Button (mobile) */}
-                    {hasFeature('trip_planner') && <div
-                        onClick={tplan.isOpen ? tplan.handleClose : openTplan}
-                        style={{
-                            width: 'var(--nav-chip)', height: 'var(--nav-chip)', borderRadius: '50%',
-                            backgroundColor: tplan.isOpen ? 'var(--t-accent-soft)' : 'var(--t-chip)',
-                            border: tplan.isOpen ? '2px solid var(--t-accent)' : '2px solid transparent',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: 'pointer', color: tplan.isOpen ? 'var(--t-accent)' : '#5f6368', flexShrink: 0,
-                        }}
-                    >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                            <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
-                            <line x1="3" y1="10" x2="21" y2="10" />
-                        </svg>
-                    </div>}
-
-                    {/* Saved Locations Button (mobile) */}
-                    {hasFeature('saved_locations') && <div
-                        onClick={saved.isOpen ? saved.handleClose : openSaved}
-                        style={{
-                            width: 'var(--nav-chip)', height: 'var(--nav-chip)', borderRadius: '50%',
-                            backgroundColor: saved.isOpen ? 'var(--t-accent-soft)' : 'var(--t-chip)',
-                            border: saved.isOpen ? '2px solid var(--t-accent)' : '2px solid transparent',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: 'pointer', color: saved.isOpen ? 'var(--t-accent)' : '#5f6368',
-                            flexShrink: 0,
-                        }}
-                    >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill={saved.isOpen ? 'var(--t-accent)' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-                        </svg>
-                    </div>}
-
                     <Link to="/profile" style={{ textDecoration: 'none', flexShrink: 0 }}>
                         <div style={{
                             width: 'var(--nav-chip)', height: 'var(--nav-chip)', borderRadius: '50%',
@@ -436,8 +395,51 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                             </svg>
                         </div>
                     </Link>
+
+                    {/* Menu (mobile): Trip Planner, Saved Locations, Weekly Commute */}
+                    {menuItems.length > 0 && (
+                        <button
+                            type="button"
+                            className="navbar-chip"
+                            onClick={() => setMenuOpen(o => !o)}
+                            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+                            aria-expanded={menuOpen}
+                            style={{ border: 'none', backgroundColor: menuOpen || menuItems.some(i => i.open) ? 'var(--t-accent-soft)' : 'var(--t-chip)', color: '#3c4043', padding: 0 }}
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                                {menuOpen
+                                    ? <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
+                                    : <><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></>}
+                            </svg>
+                        </button>
+                    )}
                 </div>
             </div>
+
+            {/* Mobile menu */}
+            {menuOpen && (
+                <div className="navbar-mobile-menu">
+                    {menuItems.map(item => (
+                        <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => { item.toggle(); setMenuOpen(false); }}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                                padding: '10px 12px', border: 'none', borderRadius: '12px', cursor: 'pointer',
+                                fontSize: '15px', fontWeight: 500, textAlign: 'left',
+                                backgroundColor: item.open ? 'var(--t-accent-soft)' : 'transparent',
+                                color: item.open ? 'var(--t-accent)' : '#3c4043',
+                            }}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                {item.icon}
+                            </svg>
+                            {item.label}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* Weekly Commute Panel */}
             {weplan.isOpen && <WeeklyPlannerPanel ctrl={weplan} />}
@@ -495,10 +497,20 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                     flex-shrink: 0; cursor: pointer; text-decoration: none; overflow: hidden;
                 }
 
+                .navbar-mobile-menu {
+                    display: none;
+                    flex-direction: column;
+                    gap: 2px;
+                    padding: 6px 8px 10px;
+                    border-top: 1px solid #f1f3f4;
+                    background: var(--t-surface);
+                }
+
                 /* ── Mobile: <= 640px ── */
                 @media (max-width: 640px) {
                     .navbar-desktop-actions { display: none; }
                     .navbar-mobile-actions { display: flex; gap: 4px; }
+                    .navbar-mobile-menu { display: flex; }
                     /* Search shrinks to make room for the icons; the text stays 16px so phones don't zoom in */
                     .navbar-search { margin: 0 2px !important; min-width: 0; }
                     .navbar-search > div { padding: 6px 10px !important; gap: 6px !important; }

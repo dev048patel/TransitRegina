@@ -8,6 +8,7 @@ import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-do
 import { Home, Users, Bus, BarChart3, ShieldAlert, ScrollText, ArrowLeft, Menu, ShieldCheck, X } from 'lucide-react';
 import { useAuth } from '../../models/context/AuthContext';
 import { supabase } from '../../models/lib/supabase';
+import { twoStepTimeOf } from '../../models/auth/AuthModel';
 
 const NAV = [
     { to: '/admin', label: 'Home', icon: Home, end: true },
@@ -32,14 +33,17 @@ export default function AdminLayout() {
         let timer: ReturnType<typeof setTimeout>;
         const signOut = async () => { try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { /* storage blocked */ } await logout(); navigate('/login', { replace: true }); };
         // The time of the last activity is kept in the browser, so closing the tab does not stop the clock.
-        // A login newer than that activity is a fresh start and is left alone.
+        // An authenticator code entered after that activity is a fresh start and is left alone (the code's own
+        // time from the token, not last_sign_in_at, which isn't a reliable sign of a new login).
         let last = 0;
         try { last = Number(localStorage.getItem(LAST_ACTIVE_KEY)) || 0; } catch { /* storage blocked */ }
         const idleFor = Date.now() - last;
         if (last && idleFor > IDLE_MINUTES * 60_000) {
             void supabase.auth.getSession().then(({ data }) => {
-                const signedInAt = Date.parse(data.session?.user.last_sign_in_at ?? '') || 0;
-                if (signedInAt < last) void signOut();
+                let codeAt = 0;
+                try { codeAt = twoStepTimeOf(JSON.parse(atob((data.session?.access_token ?? '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))) * 1000; }
+                catch { /* no readable token: treat as old */ }
+                if (codeAt < last) void signOut();
             });
         }
         let written = 0;

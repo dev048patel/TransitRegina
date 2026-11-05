@@ -6,6 +6,20 @@
  * Session management is handled entirely by Supabase Auth.
  */
 
+/**
+ * How long an authenticator code counts for admin pages. Supabase keeps a login "passed two-step" until
+ * it signs out, so without a limit a phone that entered a code weeks ago still opened the admin panel.
+ * Used by AuthContext (the pages) and requireAdmin (the API), so both ask again at the same time.
+ */
+export const TWO_STEP_MAX_SECONDS = 12 * 60 * 60;
+
+/** When this login last entered its authenticator code (seconds), from the token's amr claim; 0 if never. */
+export function twoStepTimeOf(claims: { aal?: unknown; amr?: unknown }): number {
+    if (claims.aal !== 'aal2' || !Array.isArray(claims.amr)) return 0;
+    const totp = claims.amr.find((m: { method?: string }) => m?.method === 'totp');
+    return Number(totp?.timestamp) || 0;
+}
+
 /* ── Authenticated user (used by AuthContext) ────────────────────── */
 
 export interface User {

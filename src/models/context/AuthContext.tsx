@@ -15,7 +15,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import type { User } from '../auth/AuthModel';
+import { twoStepTimeOf, TWO_STEP_MAX_SECONDS, type User } from '../auth/AuthModel';
 import { fetchAgreedTermsVersion } from '../services/AuthService';
 import { recordLogout } from '../services/UserRegistry';
 import { formatMobile } from '../services/AuthService';
@@ -48,9 +48,12 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-/** Supabase marks a login that passed the second step with aal2 inside the session token. */
+/** Whether this login entered its authenticator code within TWO_STEP_MAX_SECONDS (read from the token's aal and amr). */
 function tokenPassedTwoStep(token: string): boolean {
-    try { return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).aal === 'aal2'; }
+    try {
+        const at = twoStepTimeOf(JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))));
+        return at > 0 && Date.now() / 1000 - at <= TWO_STEP_MAX_SECONDS;
+    }
     catch { return false; }
 }
 

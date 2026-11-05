@@ -218,15 +218,14 @@ export const useMapController = (): MapControllerOutput => {
 
   // Show stops only when zoomed in enough (avoids marker lag at low zoom)
   // Route-selected stops also require zoom >= 14 to avoid clutter at city-wide view.
-  // Phones and tablets show stops from zoom 11, the zoom the map opens at, so riders don't have to pinch in to find one.
-  // ponytail: at zoom 11 every stop in view is drawn (~1,400 city-wide); cluster them if phones get slow
+  // Phones and tablets show all stops from zoom 15 (a few blocks) so riders pinch in less to find one.
   const touch = useMemo(isTouchDevice, []);
   const visibleStops = useMemo(() => {
-    if (selectedRoute && currentZoom >= (touch ? 11 : 14)) {
+    if (selectedRoute && currentZoom >= 14) {
       const routeStopIds = getStopsForRoute(selectedRoute);
       return allStops.filter(stop => routeStopIds.has(stop.STOP_ID));
     }
-    if (currentZoom >= (touch ? 11 : 17)) return allStops;
+    if (currentZoom >= (touch ? 15 : 17)) return allStops;
     return [];
   }, [allStops, selectedRoute, currentZoom, touch]);
 

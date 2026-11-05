@@ -18,21 +18,21 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
     return (
         <div className="stop-detail-panel t-panel" style={panelStyle}>
             {/* Drag handle for mobile */}
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0' }}>
+            <div className="sdp-handle" style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0' }}>
                 <div style={{ width: '36px', height: '4px', backgroundColor: '#dadce0', borderRadius: '2px' }} />
             </div>
             {/* Header */}
-            <div className="t-panel-header" style={headerStyle}>
-                <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: '700', fontSize: '16px', color: '#202124' }}>
+            <div className="t-panel-header sdp-header" style={headerStyle}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="sdp-title" style={{ fontWeight: '700', fontSize: '16px', color: '#202124' }}>
                         {stop.STOP_NAME}
                     </div>
                     {crossStreet && (
-                        <div style={{ fontSize: '12px', color: '#5f6368', marginTop: '2px' }}>
+                        <div className="sdp-sub" style={{ fontSize: '12px', color: '#5f6368', marginTop: '2px' }}>
                             {crossStreet}
                         </div>
                     )}
-                    <div style={{
+                    <div className="sdp-chip" style={{
                         display: 'inline-block', marginTop: '6px',
                         fontSize: '11px', color: '#5f6368',
                         backgroundColor: 'var(--t-chip)', padding: '2px 8px',
@@ -42,6 +42,7 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
                     </div>
                     {direction && (
                         <div
+                            className="sdp-chip"
                             title={`Buses at this stop travel ${STOP_DIRECTION_LABEL[direction].toLowerCase()}`}
                             style={{
                                 display: 'inline-block', marginTop: '6px', marginLeft: '6px',
@@ -56,6 +57,7 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <button
+                        className="sdp-refresh"
                         onClick={handleRefresh}
                         disabled={loading}
                         title="Refresh predictions"
@@ -76,12 +78,12 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
             </div>
 
             {/* Route badge strip */}
-            <div style={badgeStripStyle}>
+            <div className="sdp-badges" style={badgeStripStyle}>
                 {allRoutes.map(routeNum => {
                     const group = routeGroups.find(g => g.routeId === routeNum);
                     const color = group?.routeColor || '#9aa0a6';
                     return (
-                        <span key={routeNum} style={{
+                        <span key={routeNum} className="sdp-badge" style={{
                             backgroundColor: color,
                             color: 'white',
                             padding: '5px 12px',
@@ -103,7 +105,7 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
             </div>
 
             {/* Content */}
-            <div style={contentStyle}>
+            <div className="sdp-content" style={contentStyle}>
                 {loading && (
                     <div style={statusStyle}>
                         <div style={spinnerStyle} />
@@ -143,7 +145,7 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
             </div>
 
             {/* Footer */}
-            <div style={footerStyle}>
+            <div className="sdp-footer" style={footerStyle}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{
                         width: '6px', height: '6px', borderRadius: '50%',
@@ -167,6 +169,31 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
                     0%, 100% { opacity: 1; }
                     50% { opacity: 0.4; }
                 }
+                /* Phones: a compact card that leaves most of the map visible */
+                @media (max-width: 640px) {
+                    .stop-detail-panel { max-height: 46vh !important; border-radius: 16px 16px 0 0 !important; }
+                    .stop-detail-panel .sdp-handle { padding-top: 6px !important; }
+                    .stop-detail-panel .sdp-header { padding: 6px 12px 8px !important; align-items: center !important; }
+                    .stop-detail-panel .sdp-title { font-size: 14px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                    .stop-detail-panel .sdp-sub { font-size: 11px !important; margin-top: 1px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                    .stop-detail-panel .sdp-chip { margin-top: 4px !important; font-size: 10px !important; padding: 1px 6px !important; }
+                    .stop-detail-panel .sdp-refresh { width: 28px !important; height: 28px !important; font-size: 14px !important; }
+                    /* Route badges: one swipeable row instead of a wrapping block */
+                    .stop-detail-panel .sdp-badges { flex-wrap: nowrap !important; justify-content: flex-start !important; overflow-x: auto; gap: 6px !important; padding: 6px 12px !important; scrollbar-width: none; }
+                    .stop-detail-panel .sdp-badges::-webkit-scrollbar { display: none; }
+                    .stop-detail-panel .sdp-badge { padding: 3px 8px !important; font-size: 11px !important; min-width: 22px !important; flex-shrink: 0; }
+                    .stop-detail-panel .sdp-content { padding: 8px 10px !important; }
+                    .stop-detail-panel .sdp-route-card { padding: 8px 10px !important; margin-bottom: 6px !important; border-radius: 10px !important; }
+                    .stop-detail-panel .sdp-route-head { margin-bottom: 4px !important; gap: 6px !important; }
+                    .stop-detail-panel .sdp-route-head > span:first-child { font-size: 11px !important; padding: 2px 8px !important; flex-shrink: 0; }
+                    .stop-detail-panel .sdp-line { font-size: 12px !important; }
+                    /* About three departures per route, the rest scroll */
+                    .stop-detail-panel .sdp-preds { max-height: 84px !important; }
+                    .stop-detail-panel .sdp-pred { padding: 4px 6px !important; }
+                    .stop-detail-panel .sdp-pred > span:first-child { width: 52px !important; font-size: 13px !important; }
+                    .stop-detail-panel .sdp-pred > span:nth-child(2) { width: 64px !important; font-size: 11px !important; }
+                    .stop-detail-panel .sdp-footer { padding: 5px 12px !important; font-size: 10px !important; }
+                }
                 @media (min-width: 641px) {
                     .stop-detail-panel {
                         position: fixed !important;
@@ -187,8 +214,8 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
 
 function RouteCard({ group, isNearest }: { group: RouteGroup; isNearest: boolean }) {
     return (
-        <div style={{
-            backgroundColor: group.hasLiveData ? 'var(--t-surface-2)' : 'var(--t-surface-2)',
+        <div className="sdp-route-card" style={{
+            backgroundColor: 'var(--t-surface-2)',
             borderRadius: '12px',
             padding: '14px',
             marginBottom: '10px',
@@ -197,7 +224,7 @@ function RouteCard({ group, isNearest }: { group: RouteGroup; isNearest: boolean
             opacity: group.hasLiveData ? 1 : 0.7,
         }}>
             {/* Route header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: group.predictions.length > 0 ? '10px' : '0' }}>
+            <div className="sdp-route-head" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: group.predictions.length > 0 ? '10px' : '0' }}>
                 <span style={{
                     backgroundColor: group.routeColor,
                     color: 'white',
@@ -209,7 +236,7 @@ function RouteCard({ group, isNearest }: { group: RouteGroup; isNearest: boolean
                     Route {group.routeId}
                 </span>
                 {group.lineName ? (
-                    <span style={{ color: '#202124', fontSize: '14px', fontWeight: '500' }}>
+                    <span className="sdp-line" style={{ color: '#202124', fontSize: '14px', fontWeight: '500', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {group.lineName}
                     </span>
                 ) : null}
@@ -233,12 +260,12 @@ function RouteCard({ group, isNearest }: { group: RouteGroup; isNearest: boolean
 
             {/* All predictions as rows — scrollable within each route */}
             {group.predictions.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0px', maxHeight: '200px', overflowY: 'auto' }}>
+                <div className="sdp-preds" style={{ display: 'flex', flexDirection: 'column', gap: '0px', maxHeight: '200px', overflowY: 'auto' }}>
                     {group.predictions.map((pred, i) => {
                         const isNext = i === 0 && isNearest;
                         const isArriving = pred.minutesAway <= 3;
                         return (
-                            <div key={i} style={{
+                            <div key={i} className="sdp-pred" style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 padding: '6px 8px',

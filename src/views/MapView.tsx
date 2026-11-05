@@ -201,7 +201,11 @@ export const MapView: React.FC<MapViewProps> = ({
           onClearPlace={handleClearPlace}
           routes={routes}
           selectedRoute={selectedRoute}
-          onRouteSelect={setSelectedRoute}
+          onRouteSelect={(routeNum) => {
+            setSelectedRoute(routeNum);
+            // Clearing the route also lets go of the bus that picked it
+            if (!routeNum) setSelectedBus(null);
+          }}
         />
       )}
 

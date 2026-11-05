@@ -2,6 +2,7 @@
   "name": "transitr-sms",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "SMS commute alerts for Transit Regina, deployed as its own service",
   "scripts": {
     "start": "tsx src/index.ts",

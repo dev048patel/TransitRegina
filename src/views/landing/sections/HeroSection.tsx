@@ -66,7 +66,7 @@ export default function HeroSection({ headline, subheadline, primaryCTA, trustIn
 
                         <div className="flex flex-col sm:flex-row gap-4 mb-10">
                             <Link
-                                to="/login"
+                                to="/map"
                                 className="group px-9 py-4 rounded-2xl bg-[#003DA5] text-white font-bold text-lg flex items-center justify-center gap-2 no-underline shadow-[0_10px_32px_rgba(0,61,165,0.35)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(0,61,165,0.45)]"
                             >
                                 {primaryCTA}

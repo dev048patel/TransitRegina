@@ -55,7 +55,8 @@ router.post('/opt-in', requireAuth, async (req: Request, res: Response) => {
         return;
     }
 
-    const { error } = await userDb(req.user!.token)
+    // Only the backend can turn texts on or record consent (010_sms_and_admin_fixes.sql), after the checks above
+    const { error } = await serviceDb()
         .from('profiles')
         .update({ sms_opted_in: true, sms_consent_at: new Date().toISOString() })
         .eq('id', userId);
@@ -130,6 +131,12 @@ router.post('/verify/check', requireAuth, rateLimit('sms-verify-check', 10), asy
     catch (err) { const e = err instanceof VerifyError ? err : new VerifyError('The code could not be checked. Try again in a few minutes.', 503); res.status(e.status).json({ error: e.message }); return; }
     if (result === 'wrong') { res.status(400).json({ error: 'That code is not right. Check the text and try again.' }); return; }
     if (result === 'expired') { res.status(400).json({ error: 'That code has expired. Send a new code.' }); return; }
+
+    // One verified owner per number: phone sign-in and STOP replies find the account by its number
+    const { data: taken, error: takenErr } = await serviceDb().from('profiles').select('id')
+        .eq('mobile_number', p.phone).eq('mobile_verified', true).neq('id', req.user!.id).limit(1);
+    if (takenErr) { res.status(500).json({ error: 'Could not save the change' }); return; }
+    if (taken?.length) { res.status(409).json({ error: 'This number is already verified on another account. Contact us if it is yours.' }); return; }
 
     // Only the backend can set mobile_verified. The number must still be the one the code was sent to.
     const { data, error } = await serviceDb().from('profiles')

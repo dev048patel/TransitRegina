@@ -157,8 +157,7 @@ export function useProfileController() {
     }, [user?.id]);
 
     /* ── Logout ─────────────────────────────────────────────────── */
-    // Just call logout() — ProtectedRoute detects isAuthenticated=false
-    // and redirects to /login automatically. No navigate() needed.
+    // Just call logout() — the page then shows the guest view. No navigate() needed.
     const handleLogout = useCallback(async () => {
         await logout();
     }, [logout]);
@@ -264,7 +263,8 @@ export function useProfileController() {
                 .update({
                     full_name: editName.trim(),
                     mobile_number: formattedMobile,
-                    ...(numberChanged ? { mobile_verified: false, sms_opted_in: false } : {}),
+                    // mobile_verified is reset by the database itself (protect_profile_columns); sending it is refused
+                    ...(numberChanged ? { sms_opted_in: false } : {}),
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', user.id);

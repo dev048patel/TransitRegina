@@ -7,6 +7,7 @@
  *   Personal Info  – Name, email (verified), phone, change password
  *   Transit Prefs  – Favourite stops (removable), favourite routes (removable)
  *   Account        – Logout, delete account (with confirmation)
+ *   Signed out     – GuestProfile: map character + an SMS toggle that asks for an account
  */
 
 import React from 'react';
@@ -269,6 +270,55 @@ function DeleteConfirm({ onConfirm, onCancel, loading, error, password, setPassw
     );
 }
 
+/* ── Guest view: signed out, only the map character and an SMS toggle that asks for an account ── */
+function GuestProfile() {
+    const [wantsSms, setWantsSms] = React.useState(false);
+    const back = { from: { pathname: '/profile' } };
+    return (
+        <>
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-6 flex items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xl font-bold shrink-0 select-none">?</div>
+                <div className="flex-1 min-w-0">
+                    <h2 className="text-lg font-bold text-gray-900">Guest</h2>
+                    <p className="text-sm text-gray-500">You don't need an account to use the map.</p>
+                </div>
+            </div>
+
+            <SectionCard title="Your Map Character" icon={MapPin}>
+                <p className="text-sm text-gray-500 mb-3">Shown on the map where you are. Saved on this device.</p>
+                <CharacterPicker />
+            </SectionCard>
+
+            <SectionCard title="SMS Departure Reminders" icon={MessageSquare}>
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-gray-900">Get text reminders</p>
+                            <p className="text-xs text-gray-400 mt-0.5">We'll text you when to leave and when to get off</p>
+                        </div>
+                        <button
+                            onClick={() => setWantsSms(v => !v)}
+                            role="switch" aria-checked={wantsSms} aria-label="Get SMS reminders"
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#003DA5]/30 ${wantsSms ? 'bg-[#003DA5]' : 'bg-gray-200'}`}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${wantsSms ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                    </div>
+                    {wantsSms && (
+                        <div className="border-t border-gray-50 pt-3 space-y-2">
+                            <p className="text-sm text-gray-600">Texts go to a phone number we've confirmed is yours, so they need a free account.</p>
+                            <div className="flex gap-2">
+                                <Link to="/signup" state={back} className="flex-1 py-2 rounded-xl bg-[#003DA5] text-white text-sm font-medium text-center hover:bg-[#002d7a] transition">Create an account</Link>
+                                <Link to="/login" state={back} className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 text-center hover:bg-gray-50 transition">Sign in</Link>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </SectionCard>
+        </>
+    );
+}
+
 /* ================================================================== */
 /*  Profile Page                                                        */
 /* ================================================================== */
@@ -345,6 +395,7 @@ export default function ProfilePage() {
                 transition={{ duration: 0.3 }}
                 className="max-w-lg mx-auto px-4 pb-16 pt-6 space-y-4"
             >
+                {!user ? <GuestProfile /> : <>
                 {/* HEADER */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-6 flex items-center gap-4">
                     <div className="w-16 h-16 rounded-full bg-[#003DA5] flex items-center justify-center text-white text-xl font-bold shrink-0 select-none">
@@ -559,6 +610,7 @@ export default function ProfilePage() {
                         </span>
                     </button>
                 </div>
+                </>}
             </motion.div>
         </div>
     );

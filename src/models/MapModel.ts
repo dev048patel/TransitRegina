@@ -33,6 +33,10 @@ export interface MapOptions {
 
 // The Model Object
 /** Phones and tablets (a finger is the main pointer). A touchscreen laptop used with a mouse counts as desktop. */
+/** Weather (banner, winter walk slow-down, ❄️ walk badge) is switched off unless VITE_WEATHER_ENABLED=true */
+// (`?.`: this file is also loaded by Node, where import.meta.env doesn't exist)
+export const WEATHER_ENABLED = import.meta.env?.VITE_WEATHER_ENABLED === 'true';
+
 export const isTouchDevice = (): boolean => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
 
 export const MapModel = {

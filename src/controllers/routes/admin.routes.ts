@@ -144,6 +144,11 @@ router.delete('/users/:id', requireFreshTwoStep, async (req: Request, res: Respo
     if (id === req.user!.id) { reject(req, res, 'You cannot delete your own account from the admin panel'); return; }
     // Note the email first: once the account is gone, the log could only show an id
     const { data: gone } = await serviceDb().from('profiles').select('email').eq('id', id).maybeSingle();
+    // The SMS service's copy of this person (texts with their number, alerts, trips) is not removed with the account
+    for (const table of ['alerts', 'messages', 'trip_plans', 'outage_notices']) {
+        const { error: smsErr } = await serviceDb().schema('sms').from(table).delete().eq('user_id', id);
+        if (smsErr) { console.error(`[Admin] Delete user stopped at sms.${table}:`, smsErr.message); res.status(500).json({ error: 'Could not delete the user' }); return; }
+    }
     const { error } = await getSupabaseAdmin().auth.admin.deleteUser(id);
     if (error) { console.error('[Admin] Delete user error:', error.message); res.status(500).json({ error: 'Could not delete the user' }); return; }
     await audit(req, 'user_deleted', `Admin deleted user ${id}${gone?.email ? ` (${gone.email})` : ''}.${reasonOf(req)}`, 'critical');

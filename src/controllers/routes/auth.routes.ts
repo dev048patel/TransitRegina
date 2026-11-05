@@ -72,7 +72,12 @@ router.post('/accept-terms', requireAuth, rateLimit('accept-terms', 10), async (
 });
 
 /* Every table that holds something about one rider, and the column that names them */
-const RIDER_DATA: [table: string, column: string][] = [
+const RIDER_DATA: [table: string, column: string, schema?: 'sms'][] = [
+    // The SMS service's copy: texts sent (with the phone number), planned alerts, trips (their legs go with them)
+    ['alerts', 'user_id', 'sms'],
+    ['messages', 'user_id', 'sms'],
+    ['trip_plans', 'user_id', 'sms'],
+    ['outage_notices', 'user_id', 'sms'],
     ['favourite_stops', 'user_id'],
     ['favourite_routes', 'user_id'],
     ['saved_destinations', 'user_id'],
@@ -95,8 +100,8 @@ router.delete('/account', requireAuth, rateLimit('delete-account', 3), async (re
     }
     const id = req.user!.id;
     const db = serviceDb();
-    for (const [table, column] of RIDER_DATA) {
-        const { error } = await db.from(table).delete().eq(column, id);
+    for (const [table, column, schema] of RIDER_DATA) {
+        const { error } = await (schema ? db.schema(schema) : db).from(table).delete().eq(column, id);
         if (error) {
             console.error(`[Auth] Account deletion stopped at ${table}:`, error.message);
             res.status(500).json({ error: 'Your account could not be fully deleted. Please try again, or contact us and we will finish it.' });

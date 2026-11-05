@@ -65,9 +65,8 @@ export const MapView: React.FC<MapViewProps> = ({
   const stopIcon = stopIconFor(character);
   const placePin = destinationPinFor(character);
 
-  // Phones and tablets: bigger stops to hit with a finger, and a tap on the map doesn't pick a destination
+  // Phones and tablets: a tap on the map doesn't pick a destination
   const isTouch = useMemo(isTouchDevice, []);
-  const stopScale = isTouch ? 1.5 : 1;
 
   // Theme the map screens to the chosen character; other pages keep the original colours
   useEffect(() => {
@@ -275,8 +274,8 @@ export const MapView: React.FC<MapViewProps> = ({
             title={`${stop.STOP_NAME} (#${stop.STOP_ID})`}
             icon={{
               url: stopIcon.url,
-              scaledSize: isLoaded ? new google.maps.Size(stopIcon.width * stopScale, stopIcon.height * stopScale) : undefined,
-              anchor: isLoaded ? new google.maps.Point(stopIcon.anchorX * stopScale, stopIcon.anchorY * stopScale) : undefined,
+              scaledSize: isLoaded ? new google.maps.Size(stopIcon.width, stopIcon.height) : undefined,
+              anchor: isLoaded ? new google.maps.Point(stopIcon.anchorX, stopIcon.anchorY) : undefined,
             }}
             onClick={() => handleStopClick(stop)}
           />

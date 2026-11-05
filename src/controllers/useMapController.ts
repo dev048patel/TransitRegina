@@ -5,7 +5,7 @@ This is Frontend Part, which controls behaviour of the map.
 3. Return prepared data for the View
 */
 import { useLoadScript } from '@react-google-maps/api';
-import { MapModel, Coordinates, MapOptions, isTouchDevice } from '../models/MapModel';
+import { MapModel, Coordinates, MapOptions, isTouchDevice, WEATHER_ENABLED } from '../models/MapModel';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Stop } from '../models/transit/Stop';
 import transitRoutes from '../models/data/transitRoutes';
@@ -63,8 +63,10 @@ export const useMapController = (): MapControllerOutput => {
     }
   }, [allStops, apiRoutes]);
 
-  // Fetch weather from backend every 5 minutes — backend caches EC DataMart for us
+  // Fetch weather from backend every 5 minutes — backend caches EC DataMart for us.
+  // Off unless VITE_WEATHER_ENABLED=true: with no weather the banner hides and walk times aren't slowed.
   useEffect(() => {
+    if (!WEATHER_ENABLED) return;
     const baseUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
     const fetch5min = async () => {
       try {

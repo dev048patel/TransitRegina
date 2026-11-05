@@ -10,11 +10,18 @@ import { supabase } from './supabase';
 
 const BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
-async function authHeaders(): Promise<Record<string, string>> {
+/** The only endpoints that work without a login; every other one answers 401 to a signed-out caller. */
+const PUBLIC_PATHS = ['/api/analytics/beacon', '/api/analytics/heartbeat', '/api/auth/login-mobile', '/api/plan/arrive-by'];
+
+async function authHeaders(path: string): Promise<Record<string, string>> {
     const { data: { session } } = await supabase.auth.getSession();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
+    } else if (!PUBLIC_PATHS.some(p => path.split('?')[0] === p)) {
+        // Signed out (for example the admin panel just signed itself out while a refresh was due): don't send
+        // a request the server can only refuse, and log as a failed login
+        throw Object.assign(new Error('Sign in required'), { status: 401 });
     }
     return headers;
 }
@@ -34,7 +41,7 @@ async function checkOk(res: Response, headers: Record<string, string>): Promise<
 }
 
 export async function apiGet(path: string): Promise<Response> {
-    const headers = await authHeaders();
+    const headers = await authHeaders(path);
     return checkOk(await fetch(`${BASE_URL}${path}`, {
         method: 'GET',
         headers,
@@ -42,7 +49,7 @@ export async function apiGet(path: string): Promise<Response> {
 }
 
 export async function apiPost(path: string, body?: unknown): Promise<Response> {
-    const headers = await authHeaders();
+    const headers = await authHeaders(path);
     return checkOk(await fetch(`${BASE_URL}${path}`, {
         method: 'POST',
         headers,
@@ -51,7 +58,7 @@ export async function apiPost(path: string, body?: unknown): Promise<Response> {
 }
 
 export async function apiPatch(path: string, body?: unknown): Promise<Response> {
-    const headers = await authHeaders();
+    const headers = await authHeaders(path);
     return checkOk(await fetch(`${BASE_URL}${path}`, {
         method: 'PATCH',
         headers,
@@ -60,7 +67,7 @@ export async function apiPatch(path: string, body?: unknown): Promise<Response> 
 }
 
 export async function apiDelete(path: string, body?: unknown): Promise<Response> {
-    const headers = await authHeaders();
+    const headers = await authHeaders(path);
     return checkOk(await fetch(`${BASE_URL}${path}`, {
         method: 'DELETE',
         headers,

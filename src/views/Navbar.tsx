@@ -334,45 +334,8 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                     </Link>
                 </div>
 
-                {/* Mobile actions — route, admin and profile on the bar; the planners in the menu */}
+                {/* Mobile actions — admin, profile, the route pill and the menu on the bar; the planners in the menu */}
                 <div className="navbar-mobile-actions">
-                    {/* Route picker (mobile): a round chip; the native picker opens over it */}
-                    {routes && onRouteSelect && (
-                        <label
-                            className="navbar-chip"
-                            title="Select route"
-                            style={{
-                                position: 'relative',
-                                backgroundColor: selectedRoute ? 'var(--t-primary)' : 'var(--t-chip)',
-                                color: selectedRoute ? 'white' : '#5f6368',
-                                fontSize: '12px', fontWeight: 700,
-                            }}
-                        >
-                            {selectedRoute ?? (
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                    <rect x="4" y="3" width="16" height="15" rx="3" /><line x1="4" y1="11" x2="20" y2="11" />
-                                    <circle cx="8" cy="15" r="1" /><circle cx="16" cy="15" r="1" /><line x1="7" y1="18" x2="7" y2="21" /><line x1="17" y1="18" x2="17" y2="21" />
-                                </svg>
-                            )}
-                            <select
-                                aria-label="Select route"
-                                value={selectedRoute || ''}
-                                onChange={(e) => onRouteSelect(e.target.value || null)}
-                                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', fontSize: '16px' }}
-                            >
-                                <option value="">{selectedRoute ? 'All routes (clear)' : 'Select route'}</option>
-                                {[...routes]
-                                    .sort((a, b) => parseInt(a.ROUTE_NUM) - parseInt(b.ROUTE_NUM))
-                                    .map(route => (
-                                        <option key={route.ROUTE_ID} value={route.ROUTE_NUM}>
-                                            Route {route.ROUTE_NUM} — {route.ROUTE_NAME}
-                                        </option>
-                                    ))
-                                }
-                            </select>
-                        </label>
-                    )}
-
                     {/* Admin (mobile) */}
                     {isAdmin && (
                         <Link to="/admin" className="navbar-chip" title="Admin dashboard" aria-label="Admin dashboard" style={{ backgroundColor: '#003DA5', color: 'white' }}>
@@ -395,6 +358,46 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                             </svg>
                         </div>
                     </Link>
+
+                    {/* Route picker (mobile): a pill that says which route is shown; the native picker opens over it */}
+                    {routes && onRouteSelect && (
+                        <label
+                            title="Select route"
+                            style={{
+                                position: 'relative', flexShrink: 0, cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', gap: '4px',
+                                height: 'var(--nav-chip)', padding: '0 8px 0 9px', borderRadius: '15px',
+                                backgroundColor: selectedRoute ? 'var(--t-primary)' : 'var(--t-chip)',
+                                color: selectedRoute ? 'white' : '#3c4043',
+                                fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap',
+                            }}
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect x="4" y="3" width="16" height="15" rx="3" /><line x1="4" y1="11" x2="20" y2="11" />
+                                <circle cx="8" cy="15" r="1" /><circle cx="16" cy="15" r="1" /><line x1="7" y1="18" x2="7" y2="21" /><line x1="17" y1="18" x2="17" y2="21" />
+                            </svg>
+                            {selectedRoute ? `Route ${selectedRoute}` : 'Route'}
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                            <select
+                                aria-label="Select route"
+                                value={selectedRoute || ''}
+                                onChange={(e) => onRouteSelect(e.target.value || null)}
+                                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', fontSize: '16px' }}
+                            >
+                                <option value="">{selectedRoute ? 'All routes (clear)' : 'Select route'}</option>
+                                {[...routes]
+                                    .sort((a, b) => parseInt(a.ROUTE_NUM) - parseInt(b.ROUTE_NUM))
+                                    .map(route => (
+                                        <option key={route.ROUTE_ID} value={route.ROUTE_NUM}>
+                                            Route {route.ROUTE_NUM} — {route.ROUTE_NAME}
+                                        </option>
+                                    ))
+                                }
+                            </select>
+                        </label>
+                    )}
 
                     {/* Menu (mobile): Trip Planner, Saved Locations, Weekly Commute */}
                     {menuItems.length > 0 && (
@@ -513,9 +516,10 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                     .navbar-mobile-menu { display: flex; }
                     /* Search shrinks to make room for the icons; the text stays 16px so phones don't zoom in */
                     .navbar-search { margin: 0 2px !important; min-width: 0; }
-                    .navbar-search > div { padding: 6px 10px !important; gap: 6px !important; }
+                    .navbar-search > div { padding: 5px 8px !important; gap: 4px !important; }
+                    .navbar-search > div > svg { width: 15px; height: 15px; }
                     .navbar-search input { min-width: 0; }
-                    .navbar-search input::placeholder { font-size: 14px; }
+                    .navbar-search input::placeholder { font-size: 13px; }
                     .navbar-logo { width: 30px !important; height: 30px !important; border-radius: 8px !important; }
                     .navbar-top-row { height: 48px; padding: 0 8px; gap: 6px; }
                 }

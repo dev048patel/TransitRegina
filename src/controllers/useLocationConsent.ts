@@ -1,6 +1,6 @@
 // useLocationConsent — the rider's choice about sharing their location, shared by every map component
 import { useEffect, useState } from 'react';
-import { browserAlreadyAllows, getLocationAttempt, getLocationChoice, getLocationProblem, onLocationChoice, onLocationProblem, retryLocation, setLocationChoice, type LocationChoice } from '../models/services/LocationConsent';
+import { askAgainOnMapOpen, browserAlreadyAllows, getLocationAttempt, getLocationChoice, getLocationProblem, onLocationChoice, onLocationProblem, retryLocation, setLocationChoice, type LocationChoice } from '../models/services/LocationConsent';
 import type { LocationProblem } from '../models/services/LocationHelp';
 
 export function useLocationConsent() {
@@ -19,6 +19,8 @@ export function useLocationConsent() {
 
     return {
         choice,
+        /** Call when the map page opens (see MapPage) */
+        askAgainOnMapOpen,
         problem,
         attempt,
         /* Saying yes asks the browser straight away, from the tap, so its prompt can appear */

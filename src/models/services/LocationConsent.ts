@@ -1,8 +1,8 @@
 /* Whether the rider has agreed to share their location with the map.
 
    The browser's own permission prompt only appears once the rider taps "Use my location", so
-   location is asked for at the moment it is useful, with an explanation first. The choice is kept
-   on this device only. */
+   location is asked for at the moment it is useful, with an explanation first. "Allowed" is kept on
+   this device; "Not now" lasts only until the map is next opened, so every visit to the map asks. */
 
 import { problemFromError, type LocationProblem } from './LocationHelp';
 
@@ -10,19 +10,33 @@ export type LocationChoice = 'allowed' | 'declined' | null;
 
 const KEY = 'transit-regina:location-choice';
 const listeners = new Set<(choice: LocationChoice) => void>();
+/** "Not now" for this visit to the map only (a "declined" saved by older versions is ignored, so they're asked again) */
+let declinedThisVisit = false;
+let allowedThisVisit = false;
 
 export function getLocationChoice(): LocationChoice {
-    try {
-        const value = localStorage.getItem(KEY);
-        return value === 'allowed' || value === 'declined' ? value : null;
-    } catch {
-        return null;
-    }
+    if (allowedThisVisit) return 'allowed';
+    try { if (localStorage.getItem(KEY) === 'allowed') return 'allowed'; } catch { /* storage blocked */ }
+    return declinedThisVisit ? 'declined' : null;
 }
 
 export function setLocationChoice(choice: Exclude<LocationChoice, null>): void {
-    try { localStorage.setItem(KEY, choice); } catch { /* private mode: remember for this visit only */ }
+    if (choice === 'allowed') {
+        allowedThisVisit = true;
+        declinedThisVisit = false;
+        try { localStorage.setItem(KEY, 'allowed'); } catch { /* private mode: remember for this visit only */ }
+    } else {
+        declinedThisVisit = true;
+        try { localStorage.removeItem(KEY); } catch { /* storage blocked */ }
+    }
     listeners.forEach(listener => listener(choice));
+}
+
+/** Opening the map: a "Not now" from an earlier visit no longer counts, so the rider is asked again */
+export function askAgainOnMapOpen(): void {
+    if (!declinedThisVisit) return;
+    declinedThisVisit = false;
+    listeners.forEach(listener => listener(getLocationChoice()));
 }
 
 export function onLocationChoice(listener: (choice: LocationChoice) => void): () => void {

@@ -4,6 +4,7 @@ import { userDb } from '../../models/lib/serverDb';
 import { SecurityEventService } from '../../models/services/SecurityEventService';
 import { clientIp } from './security';
 import { SITE } from '../../models/data/legal';
+import { twoStepTimeOf } from '../../models/auth/AuthModel';
 
 // Extend Express Request so downstream handlers get typed user info
 declare global {
@@ -19,8 +20,7 @@ function twoStepInfo(token: string): { passed: boolean; at: number } {
     try {
         const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
         // amr lists how this login was proven; the totp entry carries when the code was last entered (seconds)
-        const totp = Array.isArray(claims.amr) ? claims.amr.find((m: { method?: string }) => m?.method === 'totp') : null;
-        return { passed: claims.aal === 'aal2', at: Number(totp?.timestamp) || 0 };
+        return { passed: claims.aal === 'aal2', at: twoStepTimeOf(claims) };
     } catch { return { passed: false, at: 0 }; }
 }
 

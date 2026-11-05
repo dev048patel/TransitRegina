@@ -19,9 +19,14 @@ async function authHeaders(): Promise<Record<string, string>> {
     return headers;
 }
 
-async function checkOk(res: Response): Promise<Response> {
+async function checkOk(res: Response, headers: Record<string, string>): Promise<Response> {
     if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string; code?: string };
+        // The server refused a login this browser still holds (ended on another device, suspended, or
+        // expired): drop it here too, so the page shows signed-out instead of retrying with it
+        if (res.status === 401 && body.error === 'Sign in required' && headers['Authorization']) {
+            await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+        }
         // `code` lets callers react to specific refusals (e.g. "enter your authenticator code again")
         throw Object.assign(new Error(body.error ?? `HTTP ${res.status}`), { code: body.code, status: res.status });
     }
@@ -29,32 +34,36 @@ async function checkOk(res: Response): Promise<Response> {
 }
 
 export async function apiGet(path: string): Promise<Response> {
+    const headers = await authHeaders();
     return checkOk(await fetch(`${BASE_URL}${path}`, {
         method: 'GET',
-        headers: await authHeaders(),
-    }));
+        headers,
+    }), headers);
 }
 
 export async function apiPost(path: string, body?: unknown): Promise<Response> {
+    const headers = await authHeaders();
     return checkOk(await fetch(`${BASE_URL}${path}`, {
         method: 'POST',
-        headers: await authHeaders(),
+        headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
-    }));
+    }), headers);
 }
 
 export async function apiPatch(path: string, body?: unknown): Promise<Response> {
+    const headers = await authHeaders();
     return checkOk(await fetch(`${BASE_URL}${path}`, {
         method: 'PATCH',
-        headers: await authHeaders(),
+        headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
-    }));
+    }), headers);
 }
 
 export async function apiDelete(path: string, body?: unknown): Promise<Response> {
+    const headers = await authHeaders();
     return checkOk(await fetch(`${BASE_URL}${path}`, {
         method: 'DELETE',
-        headers: await authHeaders(),
+        headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
-    }));
+    }), headers);
 }

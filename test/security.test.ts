@@ -22,12 +22,13 @@ const TERMS = '2026-10-17.2';
 /** A token shaped like Supabase's: the middle part says whether the login passed the second step (aal2). */
 const jwt = (sub: string, aal: 'aal1' | 'aal2', codeAgeSeconds = 30) =>
     ['e30', Buffer.from(JSON.stringify({ sub, aal, amr: aal === 'aal2' ? [{ method: 'password', timestamp: 1 }, { method: 'totp', timestamp: Math.floor(Date.now() / 1000) - codeAgeSeconds }] : [{ method: 'password', timestamp: 1 }] })).toString('base64url'), 'signature'].join('.');
-const T = { admin: jwt(ADMIN, 'aal2'), adminStaleCode: jwt(ADMIN, 'aal2', 3600), adminNoTwoStep: jwt(ADMIN, 'aal1'), user: jwt(USER, 'aal1'), suspended: jwt(SUSPENDED, 'aal1'), newcomer: jwt(NEWCOMER, 'aal1') };
+const T = { admin: jwt(ADMIN, 'aal2'), adminStaleCode: jwt(ADMIN, 'aal2', 3600), adminDayOldCode: jwt(ADMIN, 'aal2', 13 * 3600), adminNoTwoStep: jwt(ADMIN, 'aal1'), user: jwt(USER, 'aal1'), suspended: jwt(SUSPENDED, 'aal1'), newcomer: jwt(NEWCOMER, 'aal1') };
 /** `terms`: the Terms version on the account's profile (everyone has agreed except the newcomer) */
 const TOKENS: Record<string, { id: string; role: string; status: string; terms?: string | null }> = {
     [T.admin]: { id: ADMIN, role: 'admin', status: 'active' },
     [T.adminNoTwoStep]: { id: ADMIN, role: 'admin', status: 'active' },
     [T.adminStaleCode]: { id: ADMIN, role: 'admin', status: 'active' },
+    [T.adminDayOldCode]: { id: ADMIN, role: 'admin', status: 'active' },
     [T.user]: { id: USER, role: 'user', status: 'active' },
     [T.suspended]: { id: SUSPENDED, role: 'user', status: 'suspended' },
     [T.newcomer]: { id: NEWCOMER, role: 'user', status: 'active', terms: null },
@@ -203,6 +204,16 @@ test('an admin who has not passed two-step sign-in cannot use admin endpoints', 
     assert.ok(events.recent().some(e => e.type === 'admin_two_step_missing' && e.userId === ADMIN));
     assert.equal(backendWrites().length, 0);
     assert.equal(calls.filter(c => c.url.includes('/auth/v1/admin/')).length, 0);
+});
+
+test('an authenticator code entered more than 12 hours ago no longer opens admin endpoints', async () => {
+    // Supabase keeps a login "passed two-step" until sign-out, so an old phone session must be asked again
+    for (const [method, p, body] of ADMIN_ONLY) {
+        const r = await api(method, p, { body, token: T.adminDayOldCode });
+        assert.equal(r.status, 403, `${method} ${p}`);
+        assert.equal(r.json.code, 'two_step_required');
+    }
+    assert.equal(backendWrites().length, 0);
 });
 
 test('a password-only admin login still works for ordinary signed-in features', async () => {

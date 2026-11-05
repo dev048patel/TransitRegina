@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { SecurityEventService } from '../../models/services/SecurityEventService';
 import { clientIp } from './security';
+import { TWO_STEP_MAX_SECONDS } from '../../models/auth/AuthModel';
 
 const FRESH_SECONDS = 10 * 60;
 
@@ -30,8 +31,9 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
         res.status(403).json({ error: 'Admin access required' });
         return;
     }
-    // A password alone is not enough for admin powers: the login must have passed the authenticator-app step
-    if (!req.user.twoStep) {
+    // A password alone is not enough for admin powers: the login must have passed the authenticator-app step,
+    // and recently — Supabase keeps a login "passed" until it signs out, so an old phone session would count forever
+    if (!req.user.twoStep || Date.now() / 1000 - req.user.twoStepAt > TWO_STEP_MAX_SECONDS) {
         void SecurityEventService.record({ type: 'admin_two_step_missing', severity: 'warning', throttle: true, ip: clientIp(req), userId: req.user.id, path: req.originalUrl,
             message: 'An admin account used an admin endpoint without completing two-step sign-in' });
         res.status(403).json({ error: 'Two-step sign-in required', code: 'two_step_required' });

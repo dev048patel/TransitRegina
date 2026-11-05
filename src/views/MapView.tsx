@@ -4,7 +4,7 @@
  */
 import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
-import { Coordinates } from '../models/MapModel';
+import { Coordinates, isTouchDevice } from '../models/MapModel';
 import { TripOption } from '../models/transit/RoutePlanning';
 import { BusPosition } from '../models/transit/BusPosition';
 import { Stop } from '../models/transit/Stop';
@@ -66,7 +66,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const placePin = destinationPinFor(character);
 
   // Phones and tablets: bigger stops to hit with a finger, and a tap on the map doesn't pick a destination
-  const isTouch = useMemo(() => window.matchMedia('(pointer: coarse)').matches, []);
+  const isTouch = useMemo(isTouchDevice, []);
   const stopScale = isTouch ? 1.5 : 1;
 
   // Theme the map screens to the chosen character; other pages keep the original colours

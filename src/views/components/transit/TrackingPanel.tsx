@@ -91,7 +91,7 @@ export default function TrackingPanel({ tripOption, onStopTracking, onBack, dest
                 </span>
             </div>
 
-            {/* Text me this trip (admins only while it is being tried out) */}
+            {/* Text me this trip (admins only while it is being tried out; signed-out riders are asked to sign in) */}
             {texts.offered && texts.state !== 'declined' && (
                 <div style={textsStyle} role="region" aria-label="Trip texts">
                     <MessageSquare size={16} aria-hidden style={{ flexShrink: 0, marginTop: '2px' }} />

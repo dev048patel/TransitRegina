@@ -46,7 +46,7 @@ export default function FinalCTA() {
                     {/* CTA Buttons */}
                     <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
                         <Link
-                            to="/login"
+                            to="/map"
                             className="group px-10 py-4 bg-[#003DA5] text-white rounded-2xl font-bold text-lg shadow-lg shadow-blue-200 hover:shadow-xl hover:shadow-blue-300 hover:-translate-y-1 transition-all duration-300 flex items-center gap-3 no-underline"
                         >
                             Get Started Free

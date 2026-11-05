@@ -7,6 +7,7 @@
  *   Personal Info  – Name, email (verified), phone, change password
  *   Transit Prefs  – Favourite stops (removable), favourite routes (removable)
  *   Account        – Logout, delete account (with confirmation)
+ *   Signed out     – GuestProfile: sign-in / sign-up card + map character
  */
 
 import React from 'react';
@@ -269,6 +270,28 @@ function DeleteConfirm({ onConfirm, onCancel, loading, error, password, setPassw
     );
 }
 
+/* ── Guest view: signed out, a sign-in / sign-up card and the map character ── */
+function GuestProfile() {
+    const back = { from: { pathname: '/profile' } };
+    return (
+        <>
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-6">
+                <h2 className="text-lg font-bold text-gray-900">Save your daily commute</h2>
+                <p className="text-sm text-gray-500 mt-1">Sign in to save your frequent stops, favourite routes and get instant access to your daily schedules.</p>
+                <div className="flex gap-2 mt-4">
+                    <Link to="/login" state={back} className="flex-1 py-2 rounded-xl bg-[#003DA5] text-white text-sm font-medium text-center hover:bg-[#002d7a] transition">Sign in</Link>
+                    <Link to="/signup" state={back} className="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 text-center hover:bg-gray-50 transition">Sign up</Link>
+                </div>
+            </div>
+
+            <SectionCard title="Your Map Character" icon={MapPin}>
+                <p className="text-sm text-gray-500 mb-3">Shown on the map where you are. Saved on this device.</p>
+                <CharacterPicker />
+            </SectionCard>
+        </>
+    );
+}
+
 /* ================================================================== */
 /*  Profile Page                                                        */
 /* ================================================================== */
@@ -345,6 +368,7 @@ export default function ProfilePage() {
                 transition={{ duration: 0.3 }}
                 className="max-w-lg mx-auto px-4 pb-16 pt-6 space-y-4"
             >
+                {!user ? <GuestProfile /> : <>
                 {/* HEADER */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-6 flex items-center gap-4">
                     <div className="w-16 h-16 rounded-full bg-[#003DA5] flex items-center justify-center text-white text-xl font-bold shrink-0 select-none">
@@ -559,6 +583,7 @@ export default function ProfilePage() {
                         </span>
                     </button>
                 </div>
+                </>}
             </motion.div>
         </div>
     );

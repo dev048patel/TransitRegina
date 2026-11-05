@@ -2,7 +2,8 @@
  * useTripTextsController.ts — Transit Regina  [MVC Controller]
  * One-time trip texts on the tracking panel: once a trip is started, offers to text the rider for it
  * ("leave now", then "get off at the next stop" for each bus), turns the texts on, and stops them when
- * the trip is stopped. Offered to admins only while it is being tried out.
+ * the trip is stopped. Offered to admins only while it is being tried out, and to signed-out riders, who
+ * are told to sign in and turn text alerts on first.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../models/context/AuthContext';
@@ -12,7 +13,7 @@ import type { TripOption } from '../models/transit/RoutePlanning';
 export type TripTextsState = 'ask' | 'starting' | 'on' | 'declined';
 
 export function useTripTextsController(trip: TripOption, destinationName?: string) {
-    const { isAdmin } = useAuth();
+    const { isAdmin, isAuthenticated } = useAuth();
     const [state, setState] = useState<TripTextsState>('ask');
     const [error, setError] = useState('');
     /** The refusal is fixed on the profile page (verify the number, or turn text alerts on) */
@@ -24,6 +25,12 @@ export function useTripTextsController(trip: TripOption, destinationName?: strin
     useEffect(() => { setState('ask'); setError(''); setFixOnProfile(false); setInfo(null); }, [trip]);
 
     const start = useCallback(async () => {
+        // Signed out: /profile sends them through sign-in, then they turn text alerts on there
+        if (!isAuthenticated) {
+            setError('Sign in and turn on text alerts on your profile to get trip texts.');
+            setFixOnProfile(true);
+            return;
+        }
         setState('starting');
         setError('');
         setFixOnProfile(false);
@@ -42,7 +49,7 @@ export function useTripTextsController(trip: TripOption, destinationName?: strin
             setFixOnProfile(err?.code === 'verify_phone' || err?.code === 'opt_in');
             setState('ask');
         }
-    }, [trip, destinationName]);
+    }, [trip, destinationName, isAuthenticated]);
 
     /** Stops the texts still to come. Call it when the trip is stopped; it does nothing if texts were never on. */
     const stop = useCallback(async () => {
@@ -53,5 +60,5 @@ export function useTripTextsController(trip: TripOption, destinationName?: strin
         catch { /* the trip ends anyway; its texts stop being useful once the buses have gone */ }
     }, []);
 
-    return { offered: isAdmin, state, error, fixOnProfile, info, start, decline: () => setState('declined'), stop };
+    return { offered: isAdmin || !isAuthenticated, state, error, fixOnProfile, info, start, decline: () => setState('declined'), stop };
 }

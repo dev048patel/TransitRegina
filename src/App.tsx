@@ -16,8 +16,8 @@ Route Map:
   /signup    → SignupPage           (public only — bounces logged-in users to /map)
   /forgot-password → ForgotPasswordPage (public only)
   /reset-password  → ResetPasswordPage  (public — the emailed link signs the user in, so NOT public-only)
-  /map       → MapPage              (protected — requires login)
-  /profile   → ProfilePage         (protected — requires login)
+  /map       → MapPage              (public — SMS and saved places ask to sign in)
+  /profile   → ProfilePage         (public — guest view until signed in; account changes need login)
   /admin/*   → Admin panel         (admin only — requires role = 'admin' in profiles)
 */
 
@@ -145,23 +145,13 @@ function AppRoutes() {
                 {/* Not PublicOnly: the recovery link arrives with a live session */}
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
 
+                {/* ── Public: the map — sign-in only needed for SMS and account changes ── */}
+                <Route path="/map" element={<MapPage />} />
+
+                {/* ── Public: profile — signed out it shows a guest view that offers an account for SMS ── */}
+                <Route path="/profile" element={<ProfilePage />} />
+
                 {/* ── Protected Pages ────────────────────────────────────── */}
-                <Route
-                    path="/map"
-                    element={
-                        <ProtectedRoute>
-                            <MapPage />
-                        </ProtectedRoute>
-                    }
-                />
-                <Route
-                    path="/profile"
-                    element={
-                        <ProtectedRoute>
-                            <ProfilePage />
-                        </ProtectedRoute>
-                    }
-                />
                 {/* Two-step sign-in for admins: set up the authenticator app, or enter its code */}
                 <Route
                     path="/two-step"

@@ -1,5 +1,5 @@
 /* TrackingPanel — live trip tracking: summary, what to do right now, and the step-by-step timeline.
-   Docked on the right on desktop (the map stays visible); a collapsible bottom sheet on phones. */
+   A small collapsible top-right card on every device (.map-card in App.css), so the map stays visible. */
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ChevronDown, MessageSquare, X } from 'lucide-react';
@@ -13,7 +13,8 @@ const BLUE = '#4285F4', GREY = '#5f6368', RED = '#ea4335', ORANGE = '#e37400', G
 
 // Pure view component — time calculations delegated to TimeService
 export default function TrackingPanel({ tripOption, onStopTracking, onBack, destinationName }: TrackingPanelProps) {
-    const [collapsed, setCollapsed] = useState(false);
+    // Phones start with the summary only, so the card doesn't cover the rider on the map; the handle opens the steps
+    const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 640px)').matches);
     const texts = useTripTextsController(tripOption, destinationName);
     // Ending the trip stops its texts too
     const stopTrip = () => { void texts.stop(); onStopTracking(); };
@@ -36,7 +37,7 @@ export default function TrackingPanel({ tripOption, onStopTracking, onBack, dest
     const busIn = !live ? '' : tripOption.waitTime! <= 1 ? 'bus arriving now' : `bus in ~${tripOption.waitTime} min`;
 
     return (
-        <div className="tracking-panel t-panel" style={panelStyle}>
+        <div className="tracking-panel map-card map-card--no-nav t-panel" style={panelStyle}>
             {/* Handle: tap to shrink to the summary or open the steps */}
             <button
                 type="button"
@@ -69,8 +70,8 @@ export default function TrackingPanel({ tripOption, onStopTracking, onBack, dest
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                     {backToRoutes && (
-                        <button type="button" onClick={backToRoutes} style={backBtnStyle}>
-                            <ArrowLeft size={14} aria-hidden /> Routes
+                        <button type="button" onClick={backToRoutes} style={backBtnStyle} aria-label="Back to routes" title="Back to routes">
+                            <ArrowLeft size={14} aria-hidden /><span className="tp-label">Routes</span>
                         </button>
                     )}
                     <button type="button" className="t-keep" onClick={stopTrip} style={stopBtnStyle}>
@@ -180,22 +181,11 @@ export default function TrackingPanel({ tripOption, onStopTracking, onBack, dest
             )}
 
             <style>{`
+                /* Phones: the back button is just its arrow, so the trip time has room */
+                @media (max-width: 640px) { .tracking-panel .tp-label { display: none; } }
                 @keyframes pulse {
                     0%, 100% { opacity: 1; transform: scale(1); }
                     50% { opacity: 0.6; transform: scale(1.2); }
-                }
-                /* Desktop: dock on the right so the map stays visible */
-                @media (min-width: 641px) {
-                    .tracking-panel {
-                        top: 10px !important;
-                        bottom: auto !important;
-                        right: 10px !important;
-                        left: auto !important;
-                        width: 360px !important;
-                        max-height: calc(100vh - 20px) !important;
-                        border-radius: 16px !important;
-                        box-shadow: 0 8px 32px rgba(0,0,0,0.18) !important;
-                    }
                 }
             `}</style>
         </div>

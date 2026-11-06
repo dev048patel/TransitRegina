@@ -34,7 +34,7 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
     const arriveBy = useArriveByController({ origin, destination, time: planning ? arriveByTime : '' });
 
     return (
-        <div className="bus-suggestion-panel t-panel" style={panelStyle}>
+        <div className="bus-suggestion-panel map-card t-panel" style={panelStyle}>
             {/* Header */}
             <div className="t-panel-header" style={headerStyle}>
                 {/* Search results are "Place, street, city…": the place alone keeps this to one line */}
@@ -174,22 +174,6 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
 
             <style>{`
                 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                @media (max-width: 640px) {
-                    .bus-suggestion-panel { max-height: 50dvh !important; border-radius: 16px 16px 0 0 !important; }
-                }
-                @media (min-width: 641px) {
-                    .bus-suggestion-panel {
-                        position: fixed !important;
-                        top: 55px !important;
-                        bottom: auto !important;
-                        right: 10px !important;
-                        left: auto !important;
-                        width: 380px !important;
-                        max-height: calc(100vh - 70px) !important;
-                        border-radius: 16px !important;
-                        box-shadow: 0 8px 32px rgba(0,0,0,0.18) !important;
-                    }
-                }
             `}</style>
         </div>
     );
@@ -244,14 +228,6 @@ function RouteCard({ option, index, weather, character, onStart }: {
             {/* Header — route badges and total time */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                    {index === 0 && (
-                        <span className="t-ribbon" title={CHARACTER_VOICE[character].recommended} style={{
-                            fontSize: '11px', fontWeight: 700, color: '#137333',
-                            backgroundColor: '#e6f4ea', padding: '2px 7px', borderRadius: '8px',
-                        }}>
-                            ★ {CHARACTER_VOICE[character].recommended}
-                        </span>
-                    )}
                     {option.segments.map((seg, i) => (
                         <span key={i} style={{ ...routeBadgeStyle, backgroundColor: getRouteColor(seg.routeNum) }}>
                             Route {seg.routeNum}
@@ -267,10 +243,10 @@ function RouteCard({ option, index, weather, character, onStart }: {
                             title={`Active detour on route ${[...detouredRoutes].join(', ')} — actual path may differ`}
                             style={{
                                 fontSize: '11px', fontWeight: '600', color: '#b00020',
-                                backgroundColor: '#fce4e6', padding: '3px 8px', borderRadius: '8px',
+                                backgroundColor: '#fce4e6', padding: '2px 5px', borderRadius: '8px',
                             }}
                         >
-                            ⚠️ Detour
+                            ⚠️
                         </span>
                     )}
                     {weather && weather.walkMultiplier > 1.0 && (
@@ -292,13 +268,24 @@ function RouteCard({ option, index, weather, character, onStart }: {
                             : `~${option.totalTime} min`
                         }
                     </span>
-                    {option.estimatedArrival && (
-                        <div style={{ fontSize: '11px', color: '#5f6368', marginTop: '2px', whiteSpace: 'nowrap' }}>
-                            Arrive {option.estimatedArrival} · <span style={{ color: '#137333', fontWeight: '600' }}>Live</span>
-                        </div>
-                    )}
                 </div>
             </div>
+
+            {/* Best option, and when it gets there */}
+            {(index === 0 || option.estimatedArrival) && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '-2px 0 6px', fontSize: '11px', color: '#5f6368', flexWrap: 'wrap' }}>
+                    {index === 0 && (
+                        <span className="t-ribbon" style={{ fontWeight: 700, color: '#137333', backgroundColor: '#e6f4ea', padding: '1px 6px', borderRadius: '8px' }}>
+                            ★ {CHARACTER_VOICE[character].recommended}
+                        </span>
+                    )}
+                    {option.estimatedArrival && (
+                        <span style={{ whiteSpace: 'nowrap' }}>
+                            Arrive {option.estimatedArrival} · <span style={{ color: '#137333', fontWeight: '600' }}>Live</span>
+                        </span>
+                    )}
+                </div>
+            )}
 
             {/* Live ETA banner */}
             {option.isLivePrediction && option.waitTime !== undefined && (

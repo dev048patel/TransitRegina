@@ -27,6 +27,24 @@ a, button {
     -webkit-tap-highlight-color: transparent;
 }
 
+/* Map cards (stop departures, route suggestions, trip tracking): small and top-right on every device, as wide
+   as their content up to 360px (300px on phones), so the rest of the map stays visible. Positioned here, not per panel. */
+.map-card {
+    position: fixed !important;
+    top: 60px !important; right: 10px !important; left: auto !important; bottom: auto !important;
+    width: max-content !important;
+    max-width: min(360px, calc(100vw - 16px)) !important;
+    max-height: min(620px, calc(100dvh - 72px)) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.18) !important;
+}
+/* Trip tracking hides the navbar, so its card starts at the top */
+.map-card.map-card--no-nav { top: 10px !important; max-height: min(620px, calc(100dvh - 20px)) !important; }
+@media (max-width: 640px) {
+    .map-card { top: 54px !important; right: 8px !important; max-width: min(300px, calc(100vw - 16px)) !important; max-height: 48dvh !important; }
+    .map-card.map-card--no-nav { top: 8px !important; max-height: 48dvh !important; }
+}
+
 /* Google Maps InfoWindow - prevent it from being too wide on mobile */
 @media (max-width: 640px) {
     .gm-style-iw {

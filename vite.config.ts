@@ -6,9 +6,13 @@ export default defineConfig({
     server: {
         open: true,
         port: 3000,
+        // Fail loudly if 3000 is taken instead of moving to the next port: drifting onto 3001 made the /api proxy
+        // forward to itself in a loop until Windows ran out of sockets (ENOBUFS)
+        strictPort: true,
         proxy: {
             '/api': {
-                target: 'http://localhost:3001',
+                // 127.0.0.1, not localhost: localhost can resolve to ::1, where something other than the backend may listen
+                target: 'http://127.0.0.1:3001',
                 changeOrigin: true,
             },
         },

@@ -78,12 +78,15 @@ function useAccuracyHalo(pos: { lat: number; lng: number } | null, radius: numbe
 
 
 /** The first location after the map opens: bring the map to the rider, unless they are already zoomed in that
- *  close or are outside Regina (the map can't pan outside it). */
-function useCenterOnFirstFix(fix: { lat: number; lng: number } | null) {
+ *  close or are outside Regina (the map can't pan outside it).
+ *  `centered` is owned by MapView: the GoogleMap (and this marker) is rebuilt whenever the map is moved to a
+ *  searched place or a trip starts, and a flag kept here would reset and pull the map back to the rider. */
+function useCenterOnFirstFix(fix: { lat: number; lng: number } | null, centered?: React.MutableRefObject<boolean>) {
     const map = useGoogleMap();
     // Land where the stops are drawn, so the rider sees the stops around them straight away
     const nearMeZoom = useMemo(stopsFromZoom, []);
-    const done = useRef(false);
+    const ownFlag = useRef(false);
+    const done = centered ?? ownFlag;
     useEffect(() => {
         if (!map || !fix || done.current) return;
         done.current = true;
@@ -96,13 +99,18 @@ function useCenterOnFirstFix(fix: { lat: number; lng: number } | null) {
         // about as big as the city, so a new centre is snapped back to the middle. Zoomed in, it can move.
         map.setZoom(nearMeZoom);
         map.setCenter(fix);
-    }, [map, fix, nearMeZoom]);
+    }, [map, fix, nearMeZoom, done]);
 }
 
-export default function UserLocationMarker() {
+interface UserLocationMarkerProps {
+    /** Set once the map has been brought to the rider, or moved somewhere on purpose; survives map rebuilds */
+    centeredRef?: React.MutableRefObject<boolean>;
+}
+
+export default function UserLocationMarker({ centeredRef }: UserLocationMarkerProps = {}) {
     const { fix, lost } = useGpsFixController();
     const pos = useGlide(fix);
-    useCenterOnFirstFix(fix);
+    useCenterOnFirstFix(fix, centeredRef);
     const { character } = useMarkerCharacter();
     useAccuracyHalo(pos, fix?.accuracy ?? 0, lost);
 

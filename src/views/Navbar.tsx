@@ -36,6 +36,14 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
     const openTplan = () => { saved.handleClose(); weplan.handleClose(); tplan.handleOpen(); };
     const openWeplan = () => { saved.handleClose(); tplan.handleClose(); weplan.handleOpen(); };
 
+    // The desktop planner icons are divs: give them a button's role, focus and Enter/Space so keyboards can open them
+    const asButton = (onActivate: () => void) => ({
+        role: 'button' as const,
+        tabIndex: 0,
+        onClick: onActivate,
+        onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(); } },
+    });
+
     // Mobile: the three planner panels sit in a menu; picking one closes the menu
     const [menuOpen, setMenuOpen] = React.useState(false);
     const menuItems = [
@@ -257,8 +265,10 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
 
                     {/* Weekly Commute Button */}
                     {hasFeature('weekly_planner') && <div
-                        onClick={weplan.isOpen ? weplan.handleClose : openWeplan}
+                        {...asButton(weplan.isOpen ? weplan.handleClose : openWeplan)}
+                        aria-pressed={weplan.isOpen}
                         title="My Weekly Commute"
+                        aria-label="My Weekly Commute"
                         style={{
                             width: '34px', height: '34px', borderRadius: '50%',
                             backgroundColor: weplan.isOpen ? 'var(--t-accent-soft)' : 'var(--t-chip)',
@@ -278,8 +288,10 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
 
                     {/* Trip Planner Button */}
                     {hasFeature('trip_planner') && <div
-                        onClick={tplan.isOpen ? tplan.handleClose : openTplan}
+                        {...asButton(tplan.isOpen ? tplan.handleClose : openTplan)}
+                        aria-pressed={tplan.isOpen}
                         title="Trip Planner"
+                        aria-label="Trip Planner"
                         style={{
                             width: '34px', height: '34px', borderRadius: '50%',
                             backgroundColor: tplan.isOpen ? 'var(--t-accent-soft)' : 'var(--t-chip)',
@@ -300,8 +312,10 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
 
                     {/* Saved Locations Button */}
                     {hasFeature('saved_locations') && <div
-                        onClick={saved.isOpen ? saved.handleClose : openSaved}
+                        {...asButton(saved.isOpen ? saved.handleClose : openSaved)}
+                        aria-pressed={saved.isOpen}
                         title="Saved Locations"
+                        aria-label="Saved Locations"
                         style={{
                             width: '34px', height: '34px', borderRadius: '50%',
                             backgroundColor: saved.isOpen ? 'var(--t-accent-soft)' : 'var(--t-chip)',

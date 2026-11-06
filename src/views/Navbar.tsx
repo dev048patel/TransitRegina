@@ -129,7 +129,7 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
 
                     {/* Autocomplete Results Dropdown */}
                     {showResults && status === 'OK' && data.length > 0 && (
-                        <div style={{
+                        <div className="navbar-results" style={{
                             position: 'absolute',
                             top: '100%',
                             left: 0,
@@ -538,6 +538,8 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                     .navbar-search > div { padding: 5px 8px !important; gap: 4px !important; }
                     .navbar-search > div > svg { width: 15px; height: 15px; }
                     .navbar-search input { min-width: 0; }
+                    /* Results use the whole screen width, not the narrow search box */
+                    .navbar-results { position: fixed !important; top: 50px !important; left: 8px !important; right: 8px !important; margin-top: 0 !important; }
                     .navbar-search input::placeholder { font-size: 13px; }
                     .navbar-logo { width: 30px !important; height: 30px !important; border-radius: 8px !important; }
                     .navbar-top-row { height: 48px; padding: 0 8px; gap: 6px; }

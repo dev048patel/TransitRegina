@@ -3,7 +3,7 @@ import twilio from 'twilio';
 import express from 'express';
 import { serviceDb, userDb } from '../../models/lib/serverDb';
 import { SecurityEventService } from '../../models/services/SecurityEventService';
-import { clientIp, rateLimit, reject } from '../middleware/security';
+import { clientIp, perAccount, rateLimit, reject } from '../middleware/security';
 import { requireAuth } from '../middleware/requireAuth';
 import { requireAdmin } from '../middleware/requireAdmin';
 import { TwilioService } from '../../models/services/TwilioService';
@@ -12,13 +12,20 @@ import { PhoneVerificationService, VerifyError, CheckResult } from '../../models
 
 const router = Router();
 
-// E.164 Canadian number: +1 followed by exactly 10 digits
-const CANADIAN_E164 = /^\+1\d{10}$/;
+// E.164 number in the North American plan: +1 followed by exactly 10 digits
+const NANP_E164 = /^\+1(\d{3})\d{7}$/;
+/* +1 also covers the US and Caribbean ranges that SMS-pumping fraud uses to bill texts, so only Canadian area
+   codes get texts. ponytail: CRTC adds a new overlay code every year or two; add it here when it opens. */
+const CANADIAN_AREA_CODES = new Set([
+    204, 226, 236, 249, 250, 257, 263, 289, 306, 343, 354, 365, 367, 368, 382, 387, 403, 416, 418, 428, 431, 437, 438,
+    450, 460, 468, 474, 506, 514, 519, 548, 579, 581, 584, 587, 604, 613, 639, 647, 672, 683, 705, 709, 742, 753, 778,
+    780, 782, 807, 819, 825, 867, 873, 879, 902, 905, 942,
+].map(String));
 
-function isValidPhone(phone: string): boolean {
-    // Accept "+1XXXXXXXXXX" or "+1 XXX-XXX-XXXX" — normalise then test
-    const stripped = phone.replace(/[\s\-().]/g, '');
-    return CANADIAN_E164.test(stripped);
+/** A Canadian mobile in "+1XXXXXXXXXX" or "+1 XXX-XXX-XXXX" form */
+export function isValidPhone(phone: string): boolean {
+    const m = NANP_E164.exec(phone.replace(/[\s\-().]/g, ''));
+    return !!m && CANADIAN_AREA_CODES.has(m[1]);
 }
 
 function normalisePhone(phone: string): string {
@@ -102,13 +109,16 @@ async function savedPhone(req: Request, res: Response): Promise<{ saved: string;
     const { data: profile, error } = await userDb(req.user!.token).from('profiles').select('mobile_number, mobile_verified').eq('id', req.user!.id).single();
     if (error) { res.status(500).json({ error: 'Failed to fetch profile' }); return null; }
     if (!profile?.mobile_number) { res.status(400).json({ error: 'Add a phone number to your profile first' }); return null; }
-    if (!isValidPhone(profile.mobile_number)) { res.status(400).json({ error: 'Enter a valid Canadian number (+1 XXX-XXX-XXXX) in your profile first' }); return null; }
+    if (!isValidPhone(profile.mobile_number)) { res.status(400).json({ error: 'Text alerts are only for Canadian mobile numbers. Enter one (+1 XXX-XXX-XXXX) in your profile first.' }); return null; }
     return { saved: profile.mobile_number, phone: normalisePhone(profile.mobile_number), verified: !!profile.mobile_verified };
 }
 
 // ── POST /api/sms/verify/send ───────────────────────────────────────────────
 // Texts a one-time code to the number on the rider's profile. Twilio Verify also limits codes per number.
-router.post('/verify/send', requireAuth, rateLimit('sms-verify-send', 5), async (req: Request, res: Response) => {
+// Every code costs money, so besides the per-address limit each account gets a few a day (a script with many
+// addresses still can't pump texts).
+const CODES_PER_ACCOUNT_PER_DAY = 5;
+router.post('/verify/send', requireAuth, rateLimit('sms-verify-send', 5), rateLimit('sms-verify-send-account', CODES_PER_ACCOUNT_PER_DAY, 24 * 60 * 60_000, perAccount), async (req: Request, res: Response) => {
     const p = await savedPhone(req, res);
     if (!p) return;
     if (p.verified) { res.status(400).json({ error: 'This number is already verified' }); return; }
@@ -119,7 +129,7 @@ router.post('/verify/send', requireAuth, rateLimit('sms-verify-send', 5), async 
 
 // ── POST /api/sms/verify/check { code } ─────────────────────────────────────
 // Marks the number verified only when Twilio approves the code. Anything else leaves mobile_verified false.
-router.post('/verify/check', requireAuth, rateLimit('sms-verify-check', 10), async (req: Request, res: Response) => {
+router.post('/verify/check', requireAuth, rateLimit('sms-verify-check', 10), rateLimit('sms-verify-check-account', 20, 60 * 60_000, perAccount), async (req: Request, res: Response) => {
     const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
     if (!/^\d{4,10}$/.test(code)) { res.status(400).json({ error: 'Enter the code from the text message' }); return; }
     const p = await savedPhone(req, res);

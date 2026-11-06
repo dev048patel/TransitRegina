@@ -35,25 +35,32 @@ export async function verifyRequest(req: Request): Promise<Express.Request['user
     const { data, error } = await supabaseServer.auth.getUser(token);
     if (error || !data.user) return null;
 
-    // Role and status come from the user's own profile row, read with their own token
-    const { data: profile, error: profileErr } = await userDb(token).from('profiles').select('role, account_status').eq('id', data.user.id).single();
-    if (profileErr && profileErr.code !== 'PGRST116') return 'unavailable';   // PGRST116 = no profile row
+    // Role, status and Terms agreement come from the user's own profile row, read once with their own token
+    const profile = await readProfile(token, data.user.id);
+    if (profile === 'unavailable') return 'unavailable';
     if (profile?.account_status === 'suspended' || profile?.account_status === 'deleted') return null;
     const twoStep = twoStepInfo(token);
     return { id: data.user.id, email: data.user.email, role: profile?.role === 'admin' ? 'admin' : 'user', token, twoStep: twoStep.passed, twoStepAt: twoStep.at,
-        termsAccepted: await hasAcceptedTerms(token, data.user.id) };
+        termsAccepted: profile ? profile.termsAccepted : false };
 }
 
 /**
- * Whether the account's profile records agreement to the current Terms version. The column is
- * written only by the server (see docs/security/006_terms_acceptance.sql), so it can't be faked.
- * If that script has not been run yet the column does not exist, and the check is skipped rather
- * than locking everyone out.
+ * The profile fields every signed-in request needs, in one query (it used to be two). Whether the account
+ * agreed to the current Terms version: the column is written only by the server (see
+ * docs/security/006_terms_acceptance.sql), so it can't be faked. If that script has not been run yet the
+ * column does not exist, and the check is skipped rather than locking everyone out.
+ * null = no profile row; 'unavailable' = it could not be read.
  */
-async function hasAcceptedTerms(token: string, userId: string): Promise<boolean> {
-    const { data, error } = await userDb(token).from('profiles').select('terms_version').eq('id', userId).single();
-    if (error) return error.code === '42703';   // 42703 = column missing: not set up yet
-    return data?.terms_version === SITE.TERMS_VERSION;
+async function readProfile(token: string, userId: string): Promise<{ role?: string; account_status?: string; termsAccepted: boolean } | null | 'unavailable'> {
+    const db = userDb(token);
+    let { data, error } = await db.from('profiles').select('role, account_status, terms_version').eq('id', userId).single();
+    if (error?.code === '42703') {   // 42703 = terms column missing: not set up yet, so the check is skipped
+        ({ data, error } = await db.from('profiles').select('role, account_status').eq('id', userId).single());
+        if (error) return error.code === 'PGRST116' ? null : 'unavailable';
+        return { ...data, termsAccepted: true };
+    }
+    if (error) return error.code === 'PGRST116' ? null : 'unavailable';   // PGRST116 = no profile row
+    return { role: data?.role, account_status: data?.account_status, termsAccepted: data?.terms_version === SITE.TERMS_VERSION };
 }
 
 /* Reachable before agreeing: recording the agreement, and deleting the account instead */

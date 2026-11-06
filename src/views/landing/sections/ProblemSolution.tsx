@@ -18,7 +18,8 @@ const GUIDES: MarkerCharacterId[] = ['penguin', 'robot', 'astronaut'];
 
 export default function ProblemSolution({ problemSolutions }: ProblemSolutionProps) {
     return (
-        <section className="py-24 relative">
+        <section className="py-24 relative overflow-x-clip">
+            {/* overflow-x-clip: each story slides in from 40px to the side; before it does, the right-hand ones made phones scroll sideways */}
             <MotionConfig reducedMotion="user">
                 <div className="max-w-4xl mx-auto px-6">
                     {/* Section Header */}

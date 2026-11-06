@@ -250,14 +250,14 @@ function RouteCard({ option, index, weather, character, onStart }: {
                 <div className="t-ribbon" style={{
                     fontSize: '11px', fontWeight: '600', color: '#137333',
                     backgroundColor: '#e6f4ea', padding: '3px 10px', borderRadius: '8px',
-                    display: 'inline-block', marginBottom: '8px'
+                    display: 'inline-block', marginBottom: '4px'
                 }}>
                     ★ {CHARACTER_VOICE[character].recommended}
                 </div>
             )}
 
             {/* Header — route badges and total time */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     {option.segments.map((seg, i) => (
                         <span key={i} style={{ ...routeBadgeStyle, backgroundColor: getRouteColor(seg.routeNum) }}>
@@ -311,8 +311,8 @@ function RouteCard({ option, index, weather, character, onStart }: {
             {option.isLivePrediction && option.waitTime !== undefined && (
                 <div style={{
                     display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '6px 10px', backgroundColor: 'var(--t-accent-soft)', borderRadius: '8px',
-                    marginBottom: '10px', fontSize: '12px', fontWeight: '500'
+                    padding: '4px 8px', backgroundColor: 'var(--t-accent-soft)', borderRadius: '8px',
+                    marginBottom: '6px', fontSize: '12px', fontWeight: '500'
                 }}>
                     {/* The character "says" the live update; Default keeps the plain green light */}
                     {face
@@ -339,8 +339,8 @@ function RouteCard({ option, index, weather, character, onStart }: {
             {!option.isLivePrediction && (
                 <div style={{
                     display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '6px 10px', backgroundColor: '#fff3e0', borderRadius: '8px',
-                    marginBottom: '10px', fontSize: '12px', fontWeight: '500'
+                    padding: '4px 8px', backgroundColor: '#fff3e0', borderRadius: '8px',
+                    marginBottom: '6px', fontSize: '12px', fontWeight: '500'
                 }}>
                     <span style={{ fontSize: '14px' }}>⏱️</span>
                     <span style={{ color: '#e65100' }}>Estimated time (no live bus data)</span>
@@ -601,9 +601,9 @@ const statusStyle: React.CSSProperties = {
 
 const cardStyle: React.CSSProperties = {
     backgroundColor: 'var(--t-surface-2)',
-    borderRadius: '12px',
-    padding: '14px',
-    marginBottom: '10px',
+    borderRadius: '10px',
+    padding: '8px 10px',
+    marginBottom: '6px',
     transition: 'box-shadow 0.2s'
 };
 
@@ -636,8 +636,8 @@ const transferBadgeStyle: React.CSSProperties = {
 const timelineStepStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: '10px',
-    padding: '5px 0',
+    gap: '8px',
+    padding: '2px 0',
     position: 'relative'
 };
 

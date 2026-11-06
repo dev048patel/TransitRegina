@@ -175,29 +175,26 @@ export default function LiveBusMarker({ bus, color, selected, zoom, onSelect, on
         >
             {/* Anchored to the marker, so it travels with the bus */}
             {selected && (
-                <InfoWindow onCloseClick={onClose}>
-                    <div style={{
-                        padding: '8px 4px',
-                        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                        minWidth: '200px'
-                    }}>
-                        <div style={{ fontWeight: '700', fontSize: '15px', color: '#202124', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                // Google's header row only holds its close button and leaves a blank strip on top: our own ✕ instead
+                <InfoWindow onCloseClick={onClose} options={{ headerDisabled: true }}>
+                    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', maxWidth: '220px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{
-                                display: 'inline-block',
-                                backgroundColor: color,
-                                color: 'white',
-                                borderRadius: '6px',
-                                padding: '2px 8px',
-                                fontSize: '13px',
-                                fontWeight: '700'
-                            }}>Route {bus.route_num}</span>
-                            {bus.line_name}
+                                backgroundColor: color, color: 'white', borderRadius: '6px',
+                                padding: '1px 7px', fontSize: '12px', fontWeight: 700, flexShrink: 0,
+                            }}>{bus.route_num}</span>
+                            <span style={{ fontWeight: 600, fontSize: '13px', color: '#202124', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {bus.line_name}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                aria-label="Close bus details"
+                                style={{ marginLeft: 'auto', flexShrink: 0, border: 'none', background: 'none', padding: '0 2px', fontSize: '14px', lineHeight: 1, color: '#5f6368', cursor: 'pointer' }}
+                            >✕</button>
                         </div>
-                        <div style={{ fontSize: '13px', color: '#5f6368', lineHeight: '1.8' }}>
-                            <div>🚌 <strong>Bus ID:</strong> {bus.bus_id}</div>
-                            <div>🧭 <strong>Heading:</strong> {bus.heading}° ({compassDirection(bus.heading)})</div>
-                            <div>💨 <strong>Speed:</strong> {bus.speed > 0 ? `${bus.speed} km/h` : 'Stopped'}</div>
-                            <div>📍 <strong>Position:</strong> {bus.lat.toFixed(5)}, {bus.lng.toFixed(5)}</div>
+                        <div style={{ fontSize: '12px', color: '#5f6368', marginTop: '3px', whiteSpace: 'nowrap' }}>
+                            Bus #{bus.bus_id} · {bus.speed > 0 ? `${bus.speed} km/h` : 'Stopped'} · heading {compassDirection(bus.heading)}
                         </div>
                     </div>
                 </InfoWindow>

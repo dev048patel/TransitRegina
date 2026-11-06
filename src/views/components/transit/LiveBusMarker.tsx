@@ -111,6 +111,16 @@ function compassDirection(heading: number): string {
     return dirs[Math.round(heading / 45) % 8];
 }
 
+/** One small labelled fact on the bus card */
+function BusStat({ label, value }: { label: string; value: React.ReactNode }) {
+    return (
+        <div style={{ flex: 1, minWidth: 0, backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: '8px', padding: '4px 6px' }}>
+            <div style={{ fontSize: '9px', fontWeight: 600, color: '#80868b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#202124', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+        </div>
+    );
+}
+
 interface LiveBusMarkerProps {
     bus: BusPosition;
     color: string;
@@ -175,29 +185,41 @@ export default function LiveBusMarker({ bus, color, selected, zoom, onSelect, on
         >
             {/* Anchored to the marker, so it travels with the bus */}
             {selected && (
-                <InfoWindow onCloseClick={onClose}>
-                    <div style={{
-                        padding: '8px 4px',
-                        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                        minWidth: '200px'
-                    }}>
-                        <div style={{ fontWeight: '700', fontSize: '15px', color: '#202124', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                // Google's header row only holds its close button and leaves a blank strip on top: our own ✕ instead
+                <InfoWindow onCloseClick={onClose} options={{ headerDisabled: true }}>
+                    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', width: '216px' }}>
+                        {/* Route and where it goes */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{
-                                display: 'inline-block',
-                                backgroundColor: color,
-                                color: 'white',
-                                borderRadius: '6px',
-                                padding: '2px 8px',
-                                fontSize: '13px',
-                                fontWeight: '700'
-                            }}>Route {bus.route_num}</span>
-                            {bus.line_name}
+                                backgroundColor: color, color: 'white', borderRadius: '8px', minWidth: '30px', height: '26px',
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                padding: '0 6px', fontSize: '14px', fontWeight: 800, flexShrink: 0,
+                            }}>{bus.route_num}</span>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ fontSize: '10px', fontWeight: 600, color: '#80868b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Route {bus.route_num}</div>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#202124', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {bus.line_name}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                aria-label="Close bus details"
+                                style={{ alignSelf: 'flex-start', flexShrink: 0, width: '22px', height: '22px', border: 'none', borderRadius: '50%', background: 'rgba(0,0,0,0.06)', fontSize: '11px', lineHeight: 1, color: '#5f6368', cursor: 'pointer', padding: 0 }}
+                            >✕</button>
                         </div>
-                        <div style={{ fontSize: '13px', color: '#5f6368', lineHeight: '1.8' }}>
-                            <div>🚌 <strong>Bus ID:</strong> {bus.bus_id}</div>
-                            <div>🧭 <strong>Heading:</strong> {bus.heading}° ({compassDirection(bus.heading)})</div>
-                            <div>💨 <strong>Speed:</strong> {bus.speed > 0 ? `${bus.speed} km/h` : 'Stopped'}</div>
-                            <div>📍 <strong>Position:</strong> {bus.lat.toFixed(5)}, {bus.lng.toFixed(5)}</div>
+                        {/* Bus, speed, direction */}
+                        <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
+                            <BusStat label="Bus" value={`#${bus.bus_id}`} />
+                            <BusStat label="Speed" value={bus.speed > 0 ? `${bus.speed} km/h` : 'Stopped'} />
+                            <BusStat label="Going" value={
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                    <svg width="10" height="10" viewBox="0 0 24 24" aria-hidden="true" style={{ transform: `rotate(${bus.heading || 0}deg)` }}>
+                                        <path d="M12 2 L20 21 L12 16 L4 21 Z" fill="currentColor" />
+                                    </svg>
+                                    {compassDirection(bus.heading)}
+                                </span>
+                            } />
                         </div>
                     </div>
                 </InfoWindow>

@@ -1,322 +1,135 @@
-/* StopDetailPanel — departure board showing all routes & predictions for a selected stop */
-import React from 'react';
+/* StopDetailPanel — departure board showing all routes & predictions for a selected stop.
+   Compact on every device: a floating card (top right on desktop, under the navbar on phones), each route a
+   plain row with a colour bar, the next three departures shown and the rest one tap away. */
+import React, { useState } from 'react';
 import { StopDetailPanelProps } from '../../../models/components/StopDetailPanelProps';
 import { useStopDetailController, RouteGroup } from '../../../controllers/useStopDetailController';
 import { directionOfStop, STOP_DIRECTION_ARROW, STOP_DIRECTION_LABEL } from '../../../models/transit/StopDirection';
 
-export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps) {
-    const {
-        routeGroups, allRoutes, loading, error,
-        lastRefreshed, handleRefresh
-    } = useStopDetailController(stop.STOP_ID);
+/** Departures shown per route before "more" */
+const SHOWN = 3;
 
-    const crossStreet = stop.ONSTREET && stop.ATSTREET
-        ? `${stop.ONSTREET} @ ${stop.ATSTREET}`
-        : '';
+export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps) {
+    const { routeGroups, loading, error, lastRefreshed, handleRefresh } = useStopDetailController(stop.STOP_ID);
     const direction = directionOfStop(stop);
 
     return (
         <div className="stop-detail-panel t-panel" style={panelStyle}>
-            {/* Drag handle for mobile */}
-            <div className="sdp-handle" style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0' }}>
-                <div style={{ width: '36px', height: '4px', backgroundColor: '#dadce0', borderRadius: '2px' }} />
-            </div>
-            {/* Header */}
-            <div className="t-panel-header sdp-header" style={headerStyle}>
+            {/* Header: name, then stop number · direction · when it was updated */}
+            <div className="t-panel-header" style={headerStyle}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="sdp-title" style={{ fontWeight: '700', fontSize: '16px', color: '#202124' }}>
+                    <div style={{ fontWeight: 700, fontSize: '15px', color: '#202124', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {stop.STOP_NAME}
                     </div>
-                    {crossStreet && (
-                        <div className="sdp-sub" style={{ fontSize: '12px', color: '#5f6368', marginTop: '2px' }}>
-                            {crossStreet}
-                        </div>
-                    )}
-                    <div className="sdp-chip" style={{
-                        display: 'inline-block', marginTop: '6px',
-                        fontSize: '11px', color: '#5f6368',
-                        backgroundColor: 'var(--t-chip)', padding: '2px 8px',
-                        borderRadius: '6px'
-                    }}>
-                        Stop #{stop.STOP_ID}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px', fontSize: '11px', color: '#5f6368', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                        <span style={chipStyle}>Stop #{stop.STOP_ID}</span>
+                        {direction && (
+                            <span
+                                title={`Buses at this stop travel ${STOP_DIRECTION_LABEL[direction].toLowerCase()}`}
+                                style={{ ...chipStyle, fontWeight: 600, color: '#1a73e8', backgroundColor: '#e8f0fe' }}
+                            >
+                                {STOP_DIRECTION_ARROW[direction]} {STOP_DIRECTION_LABEL[direction]}
+                            </span>
+                        )}
+                        {lastRefreshed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>· updated {formatTimeAgo(lastRefreshed)}</span>}
                     </div>
-                    {direction && (
-                        <div
-                            className="sdp-chip"
-                            title={`Buses at this stop travel ${STOP_DIRECTION_LABEL[direction].toLowerCase()}`}
-                            style={{
-                                display: 'inline-block', marginTop: '6px', marginLeft: '6px',
-                                fontSize: '11px', fontWeight: 600, color: '#1a73e8',
-                                backgroundColor: '#e8f0fe', padding: '2px 8px',
-                                borderRadius: '6px'
-                            }}
-                        >
-                            {STOP_DIRECTION_ARROW[direction]} {STOP_DIRECTION_LABEL[direction]}
-                        </div>
-                    )}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <button
-                        className="sdp-refresh"
-                        onClick={handleRefresh}
-                        disabled={loading}
-                        title="Refresh predictions"
-                        style={{
-                            background: 'none', border: '1px solid var(--t-border)', borderRadius: '50%',
-                            width: '32px', height: '32px', cursor: loading ? 'not-allowed' : 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '16px', color: '#5f6368', opacity: loading ? 0.5 : 1,
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        {loading ? (
-                            <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>↻</span>
-                        ) : '↻'}
-                    </button>
-                    <button onClick={onClose} style={closeBtnStyle}>✕</button>
-                </div>
+                <button onClick={handleRefresh} disabled={loading} title="Refresh departures" aria-label="Refresh departures"
+                    style={{ ...iconBtnStyle, border: '1px solid var(--t-border)', opacity: loading ? 0.5 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
+                    <span style={{ display: 'inline-block', animation: loading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
+                </button>
+                <button onClick={onClose} title="Close" aria-label="Close" style={iconBtnStyle}>✕</button>
             </div>
 
-            {/* Route badge strip */}
-            <div className="sdp-badges" style={badgeStripStyle}>
-                {allRoutes.map(routeNum => {
-                    const group = routeGroups.find(g => g.routeId === routeNum);
-                    const color = group?.routeColor || '#9aa0a6';
-                    return (
-                        <span key={routeNum} className="sdp-badge" style={{
-                            backgroundColor: color,
-                            color: 'white',
-                            padding: '5px 12px',
-                            borderRadius: '14px',
-                            fontSize: '13px',
-                            fontWeight: '700',
-                            whiteSpace: 'nowrap',
-                            opacity: group ? 1 : 0.4,
-                            lineHeight: '1',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            minWidth: '28px',
-                        }}>
-                            {routeNum}
-                        </span>
-                    );
-                })}
-            </div>
-
-            {/* Content */}
-            <div className="sdp-content" style={contentStyle}>
-                {loading && (
-                    <div style={statusStyle}>
-                        <div style={spinnerStyle} />
-                        <span>Loading departures...</span>
-                    </div>
+            {/* Departures */}
+            <div style={contentStyle}>
+                {loading && routeGroups.length === 0 && (
+                    <div style={statusStyle}><div style={spinnerStyle} /> Loading departures…</div>
                 )}
 
                 {error && (
                     <div style={errorStyle}>
                         {error}
-                        <button
-                            onClick={handleRefresh}
-                            style={{
-                                marginLeft: '8px', background: 'none', border: '1px solid #d93025',
-                                borderRadius: '6px', padding: '4px 12px', cursor: 'pointer',
-                                fontSize: '12px', color: '#d93025', fontWeight: '600'
-                            }}
-                        >
+                        <button onClick={handleRefresh} style={{ marginLeft: '8px', background: 'none', border: '1px solid #d93025', borderRadius: '6px', padding: '2px 10px', cursor: 'pointer', fontSize: '12px', color: '#d93025', fontWeight: 600 }}>
                             Retry
                         </button>
                     </div>
                 )}
 
                 {!loading && !error && routeGroups.length === 0 && (
-                    <div style={emptyStyle}>
-                        <div style={{ fontSize: '32px', marginBottom: '8px' }}>🕐</div>
-                        <div style={{ fontWeight: '500', color: '#202124' }}>No departures scheduled</div>
-                        <div style={{ fontSize: '12px', color: '#5f6368', marginTop: '4px' }}>
-                            There are no predicted arrivals for this stop right now
-                        </div>
-                    </div>
+                    <div style={statusStyle}>No departures predicted for this stop right now</div>
                 )}
 
                 {routeGroups.map((group, i) => (
-                    <RouteCard key={group.routeId} group={group} isNearest={i === 0 && group.hasLiveData} />
+                    <RouteRow key={group.routeId} group={group} isNearest={i === 0 && group.hasLiveData} />
                 ))}
-            </div>
-
-            {/* Footer */}
-            <div className="sdp-footer" style={footerStyle}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{
-                        width: '6px', height: '6px', borderRadius: '50%',
-                        backgroundColor: '#34a853', display: 'inline-block',
-                        animation: 'pulse 2s infinite',
-                    }} />
-                    Auto-refreshing every 30s
-                </span>
-                {lastRefreshed && (
-                    <span>Updated {formatTimeAgo(lastRefreshed)}</span>
-                )}
             </div>
 
             <style>{`
                 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                @keyframes chipPulse {
-                    0%, 100% { box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.3); }
-                    50% { box-shadow: 0 0 0 6px rgba(26, 115, 232, 0); }
-                }
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.4; }
-                }
-                /* Phones: a compact card that leaves most of the map visible */
-                @media (max-width: 640px) {
-                    .stop-detail-panel { max-height: 46vh !important; border-radius: 16px 16px 0 0 !important; }
-                    .stop-detail-panel .sdp-handle { padding-top: 6px !important; }
-                    .stop-detail-panel .sdp-header { padding: 6px 12px 8px !important; align-items: center !important; }
-                    .stop-detail-panel .sdp-title { font-size: 14px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                    .stop-detail-panel .sdp-sub { font-size: 11px !important; margin-top: 1px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                    .stop-detail-panel .sdp-chip { margin-top: 4px !important; font-size: 10px !important; padding: 1px 6px !important; }
-                    .stop-detail-panel .sdp-refresh { width: 28px !important; height: 28px !important; font-size: 14px !important; }
-                    /* Route badges: one swipeable row instead of a wrapping block */
-                    .stop-detail-panel .sdp-badges { flex-wrap: nowrap !important; justify-content: flex-start !important; overflow-x: auto; gap: 6px !important; padding: 6px 12px !important; scrollbar-width: none; }
-                    .stop-detail-panel .sdp-badges::-webkit-scrollbar { display: none; }
-                    .stop-detail-panel .sdp-badge { padding: 3px 8px !important; font-size: 11px !important; min-width: 22px !important; flex-shrink: 0; }
-                    .stop-detail-panel .sdp-content { padding: 8px 10px !important; }
-                    .stop-detail-panel .sdp-route-card { padding: 8px 10px !important; margin-bottom: 6px !important; border-radius: 10px !important; }
-                    .stop-detail-panel .sdp-route-head { margin-bottom: 4px !important; gap: 6px !important; }
-                    .stop-detail-panel .sdp-route-head > span:first-child { font-size: 11px !important; padding: 2px 8px !important; flex-shrink: 0; }
-                    .stop-detail-panel .sdp-line { font-size: 12px !important; }
-                    /* About three departures per route, the rest scroll */
-                    .stop-detail-panel .sdp-preds { max-height: 84px !important; }
-                    .stop-detail-panel .sdp-pred { padding: 4px 6px !important; }
-                    .stop-detail-panel .sdp-pred > span:first-child { width: 52px !important; font-size: 13px !important; }
-                    .stop-detail-panel .sdp-pred > span:nth-child(2) { width: 64px !important; font-size: 11px !important; }
-                    .stop-detail-panel .sdp-footer { padding: 5px 12px !important; font-size: 10px !important; }
-                }
                 @media (min-width: 641px) {
-                    .stop-detail-panel {
-                        position: fixed !important;
-                        top: 55px !important;
-                        bottom: auto !important;
-                        right: 10px !important;
-                        left: auto !important;
-                        width: 400px !important;
-                        max-height: calc(100vh - 70px) !important;
-                        border-radius: 16px !important;
-                        box-shadow: 0 8px 32px rgba(0,0,0,0.18) !important;
-                    }
+                    .stop-detail-panel { top: 58px !important; right: 10px !important; width: 360px !important; max-height: calc(100dvh - 72px) !important; }
+                }
+                @media (max-width: 640px) {
+                    .stop-detail-panel { top: 56px !important; left: 8px !important; right: 8px !important; max-height: 42dvh !important; }
                 }
             `}</style>
         </div>
     );
 }
 
-function RouteCard({ group, isNearest }: { group: RouteGroup; isNearest: boolean }) {
+function RouteRow({ group, isNearest }: { group: RouteGroup; isNearest: boolean }) {
+    const [showAll, setShowAll] = useState(false);
+    const shown = showAll ? group.predictions : group.predictions.slice(0, SHOWN);
+    const hidden = group.predictions.length - shown.length;
+
     return (
-        <div className="sdp-route-card" style={{
-            backgroundColor: 'var(--t-surface-2)',
-            borderRadius: '12px',
-            padding: '14px',
-            marginBottom: '10px',
-            border: '1px solid var(--t-border-soft)',
-            borderLeft: `4px solid ${group.routeColor}`,
-            opacity: group.hasLiveData ? 1 : 0.7,
-        }}>
-            {/* Route header */}
-            <div className="sdp-route-head" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: group.predictions.length > 0 ? '10px' : '0' }}>
-                <span style={{
-                    backgroundColor: group.routeColor,
-                    color: 'white',
-                    padding: '3px 10px',
-                    borderRadius: '12px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                }}>
-                    Route {group.routeId}
+        <div style={{ borderLeft: `3px solid ${group.routeColor}`, padding: '4px 0 4px 8px', margin: '2px 0', opacity: group.hasLiveData ? 1 : 0.7 }}>
+            {/* Route: number, line name, LIVE */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ backgroundColor: group.routeColor, color: 'white', padding: '1px 7px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, flexShrink: 0 }}>
+                    {group.routeId}
                 </span>
-                {group.lineName ? (
-                    <span className="sdp-line" style={{ color: '#202124', fontSize: '14px', fontWeight: '500', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {group.lineName}
-                    </span>
-                ) : null}
+                <span style={{ color: '#202124', fontSize: '13px', fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {group.lineName || `Route ${group.routeId}`}
+                </span>
                 {group.hasLiveData && (
-                    <span style={{
-                        marginLeft: 'auto',
-                        fontSize: '10px', fontWeight: '600', color: '#137333',
-                        backgroundColor: '#e6f4ea', padding: '2px 8px', borderRadius: '8px',
-                    }}>
+                    <span style={{ marginLeft: 'auto', fontSize: '9px', fontWeight: 700, color: '#137333', backgroundColor: '#e6f4ea', padding: '1px 6px', borderRadius: '6px', flexShrink: 0 }}>
                         LIVE
                     </span>
                 )}
             </div>
 
-            {/* No predictions message */}
             {group.predictions.length === 0 && (
-                <div style={{ fontSize: '12px', color: '#80868b', marginTop: '8px' }}>
-                    No upcoming buses on this route
-                </div>
+                <div style={{ fontSize: '12px', color: '#80868b', marginTop: '2px' }}>No upcoming buses on this route</div>
             )}
 
-            {/* All predictions as rows — scrollable within each route */}
-            {group.predictions.length > 0 && (
-                <div className="sdp-preds" style={{ display: 'flex', flexDirection: 'column', gap: '0px', maxHeight: '200px', overflowY: 'auto' }}>
-                    {group.predictions.map((pred, i) => {
-                        const isNext = i === 0 && isNearest;
-                        const isArriving = pred.minutesAway <= 3;
-                        return (
-                            <div key={i} className="sdp-pred" style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                padding: '6px 8px',
-                                borderRadius: '8px',
-                                backgroundColor: isNext ? 'var(--t-accent-soft)' : (i % 2 === 0 ? 'transparent' : 'var(--t-chip)'),
-                                animation: isNext ? 'chipPulse 2s ease-in-out infinite' : 'none',
-                            }}>
-                                {/* Countdown */}
-                                <span style={{
-                                    width: '60px',
-                                    fontSize: isNext ? '15px' : '13px',
-                                    fontWeight: '700',
-                                    color: isArriving ? '#137333' : '#202124',
-                                    fontVariantNumeric: 'tabular-nums',
-                                    flexShrink: 0,
-                                }}>
-                                    {pred.minutesAway <= 0 ? 'NOW' : `${pred.minutesAway} min`}
-                                </span>
-                                {/* Time */}
-                                <span style={{
-                                    width: '72px',
-                                    fontSize: '12px',
-                                    color: '#5f6368',
-                                    flexShrink: 0,
-                                }}>
-                                    {pred.predTime.trim()}
-                                </span>
-                                {/* Bus ID or Scheduled */}
-                                <span style={{
-                                    fontSize: '11px',
-                                    color: pred.isLive ? 'var(--t-primary)' : '#9aa0a6',
-                                    fontWeight: pred.isLive ? '500' : '400',
-                                    flex: 1,
-                                }}>
-                                    {pred.busId ? `Bus #${pred.busId}` : 'Scheduled'}
-                                </span>
-                                {/* Last stop badge */}
-                                {pred.isLastStop && (
-                                    <span style={{
-                                        backgroundColor: '#d93025', color: 'white',
-                                        fontSize: '9px', fontWeight: '700',
-                                        padding: '1px 5px', borderRadius: '6px',
-                                        flexShrink: 0,
-                                    }}>
-                                        LAST
-                                    </span>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
+            {shown.map((pred, i) => {
+                const isNext = i === 0 && isNearest;
+                return (
+                    <div key={i} style={{
+                        display: 'flex', alignItems: 'center', gap: '10px', padding: '2px 6px', marginTop: i === 0 ? '3px' : 0,
+                        borderRadius: '6px', backgroundColor: isNext ? 'var(--t-accent-soft)' : 'transparent',
+                        fontVariantNumeric: 'tabular-nums',
+                    }}>
+                        <span style={{ minWidth: '50px', fontSize: '13px', fontWeight: 700, color: pred.minutesAway <= 3 ? '#137333' : '#202124' }}>
+                            {pred.minutesAway <= 0 ? 'NOW' : `${pred.minutesAway} min`}
+                        </span>
+                        <span style={{ minWidth: '58px', fontSize: '12px', color: '#5f6368' }}>{pred.predTime.trim()}</span>
+                        <span style={{ flex: 1, fontSize: '11px', color: pred.isLive ? 'var(--t-primary)' : '#9aa0a6', fontWeight: pred.isLive ? 500 : 400 }}>
+                            {pred.busId ? `Bus #${pred.busId}` : 'Scheduled'}
+                        </span>
+                        {pred.isLastStop && (
+                            <span style={{ backgroundColor: '#d93025', color: 'white', fontSize: '9px', fontWeight: 700, padding: '1px 5px', borderRadius: '6px' }}>LAST</span>
+                        )}
+                    </div>
+                );
+            })}
+
+            {(hidden > 0 || showAll) && group.predictions.length > SHOWN && (
+                <button onClick={() => setShowAll(v => !v)} style={{ border: 'none', background: 'none', padding: '1px 6px', fontSize: '11px', fontWeight: 600, color: 'var(--t-primary)', cursor: 'pointer' }}>
+                    {showAll ? 'Show less' : `${hidden} more`}
+                </button>
             )}
         </div>
     );
@@ -333,15 +146,9 @@ function formatTimeAgo(date: Date): string {
 
 const panelStyle: React.CSSProperties = {
     position: 'fixed',
-    top: 'auto',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    width: '100%',
-    maxHeight: '70vh',
     backgroundColor: 'var(--t-surface)',
-    borderRadius: '20px 20px 0 0',
-    boxShadow: '0 -4px 24px rgba(0,0,0,0.15)',
+    borderRadius: '14px',
+    boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
     zIndex: 1500,
     display: 'flex',
     flexDirection: 'column',
@@ -351,48 +158,48 @@ const panelStyle: React.CSSProperties = {
 
 const headerStyle: React.CSSProperties = {
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: '14px 18px',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '8px 8px 8px 12px',
     backgroundColor: 'var(--t-surface-2)',
     borderBottom: '1px solid var(--t-border-soft)',
 };
 
-const closeBtnStyle: React.CSSProperties = {
-    background: 'none',
-    border: 'none',
-    fontSize: '18px',
-    cursor: 'pointer',
-    color: '#5f6368',
-    padding: '4px 8px',
-    borderRadius: '50%',
+const chipStyle: React.CSSProperties = {
+    backgroundColor: 'var(--t-chip)',
+    padding: '1px 6px',
+    borderRadius: '5px',
+    flexShrink: 0,
 };
 
-const badgeStripStyle: React.CSSProperties = {
+const iconBtnStyle: React.CSSProperties = {
+    width: '28px',
+    height: '28px',
+    flexShrink: 0,
     display: 'flex',
-    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '8px',
-    padding: '12px 18px',
-    borderBottom: '1px solid var(--t-border-soft)',
-    backgroundColor: 'var(--t-surface-2)',
+    background: 'none',
+    border: 'none',
+    borderRadius: '50%',
+    fontSize: '15px',
+    color: '#5f6368',
+    cursor: 'pointer',
+    padding: 0,
 };
 
 const contentStyle: React.CSSProperties = {
-    padding: '10px 14px',
+    padding: '4px 10px 6px',
     overflowY: 'auto',
-    flex: 1,
     WebkitOverflowScrolling: 'touch' as any,
 };
 
 const statusStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    padding: '24px',
-    justifyContent: 'center',
-    fontSize: '14px',
+    gap: '8px',
+    padding: '12px 4px',
+    fontSize: '13px',
     color: '#5f6368',
 };
 
@@ -403,30 +210,16 @@ const spinnerStyle: React.CSSProperties = {
     borderTop: '2px solid var(--t-primary)',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
-    display: 'inline-block',
+    flexShrink: 0,
 };
 
 const errorStyle: React.CSSProperties = {
     color: '#d93025',
-    fontSize: '13px',
-    padding: '8px 12px',
+    fontSize: '12px',
+    padding: '6px 10px',
+    margin: '4px 0',
     backgroundColor: '#fce8e6',
     borderRadius: '8px',
     display: 'flex',
     alignItems: 'center',
-};
-
-const emptyStyle: React.CSSProperties = {
-    textAlign: 'center',
-    padding: '32px 16px',
-};
-
-const footerStyle: React.CSSProperties = {
-    padding: '8px 18px',
-    borderTop: '1px solid var(--t-border-soft)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    fontSize: '11px',
-    color: '#80868b',
 };

@@ -35,19 +35,11 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
 
     return (
         <div className="bus-suggestion-panel t-panel" style={panelStyle}>
-            {/* Drag handle for mobile */}
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0' }}>
-                <div style={{ width: '36px', height: '4px', backgroundColor: '#dadce0', borderRadius: '2px' }} />
-            </div>
             {/* Header */}
             <div className="t-panel-header" style={headerStyle}>
-                <div>
-                    <div style={{ fontWeight: '700', fontSize: '15px', color: '#202124' }}>
-                        🚌 Bus Suggestions
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#5f6368', marginTop: '2px' }}>
-                        To: {destination.name}
-                    </div>
+                {/* Search results are "Place, street, city…": the place alone keeps this to one line */}
+                <div title={destination.name} style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: '15px', color: '#202124', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    🚌 Buses to {destination.name.split(',')[0]}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <button
@@ -56,9 +48,9 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
                         title="Refresh suggestions"
                         style={{
                             background: 'none', border: '1px solid var(--t-border)', borderRadius: '50%',
-                            width: '32px', height: '32px', cursor: gpsLoading || searching ? 'not-allowed' : 'pointer',
+                            width: '28px', height: '28px', cursor: gpsLoading || searching ? 'not-allowed' : 'pointer',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '16px', color: '#5f6368', opacity: gpsLoading || searching ? 0.5 : 1,
+                            fontSize: '15px', color: '#5f6368', opacity: gpsLoading || searching ? 0.5 : 1,
                             transition: 'all 0.2s'
                         }}
                     >
@@ -71,11 +63,11 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
             </div>
 
             {/* Arrive-by time row */}
-            <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--t-border-soft)', display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: arriveByMode ? 'var(--t-accent-soft)' : 'var(--t-surface)' }}>
+            <div style={{ padding: '5px 12px', borderBottom: '1px solid var(--t-border-soft)', display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: arriveByMode ? 'var(--t-accent-soft)' : 'var(--t-surface)' }}>
                 <button
                     onClick={() => { setArriveByMode(m => !m); if (arriveByMode) setArriveByTime(''); }}
                     style={{
-                        padding: '4px 10px', borderRadius: '8px', border: 'none', fontSize: '12px', fontWeight: '600',
+                        padding: '3px 9px', borderRadius: '8px', border: 'none', fontSize: '12px', fontWeight: '600',
                         backgroundColor: arriveByMode ? 'var(--t-accent)' : 'var(--t-chip)',
                         color: arriveByMode ? 'white' : '#5f6368',
                         cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
@@ -101,27 +93,26 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
                         Scheduled bus times
                     </span>
                 )}
+                {/* Live status — background refreshes update here instead of replacing the results */}
+                {!planning && results.length > 0 && (
+                    <div style={liveStatusStyle}>
+                        {updating ? (
+                            <>
+                                <div style={smallSpinnerStyle} />
+                                <span>{lastUpdated ? 'Refreshing…' : 'Getting live times…'}</span>
+                            </>
+                        ) : (
+                            <>
+                                <span style={liveDotStyle} />
+                                <span>
+                                    Live
+                                    {lastUpdated && ` · ${lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                                </span>
+                            </>
+                        )}
+                    </div>
+                )}
             </div>
-
-            {/* Live status — background refreshes update here instead of replacing the results */}
-            {!planning && results.length > 0 && (
-                <div style={liveStatusStyle}>
-                    {updating ? (
-                        <>
-                            <div style={smallSpinnerStyle} />
-                            <span>{lastUpdated ? 'Refreshing live arrival times…' : 'Getting live arrival times…'}</span>
-                        </>
-                    ) : (
-                        <>
-                            <span style={liveDotStyle} />
-                            <span>
-                                Live bus times
-                                {lastUpdated && ` · updated ${lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
-                            </span>
-                        </>
-                    )}
-                </div>
-            )}
 
             {/* Content — loading, error, empty, or route cards */}
             <div style={contentStyle}>
@@ -183,6 +174,9 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
 
             <style>{`
                 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                @media (max-width: 640px) {
+                    .bus-suggestion-panel { max-height: 50dvh !important; border-radius: 16px 16px 0 0 !important; }
+                }
                 @media (min-width: 641px) {
                     .bus-suggestion-panel {
                         position: fixed !important;
@@ -208,7 +202,8 @@ function RouteCard({ option, index, weather, character, onStart }: {
     option: TripOption; index: number; weather?: WeatherSnapshot | null;
     character: MarkerCharacterId; onStart: () => void;
 }) {
-    const [expanded, setExpanded] = React.useState(index === 0);
+    // On phones every option starts collapsed so several fit on screen; desktop opens the best one
+    const [expanded, setExpanded] = React.useState(() => index === 0 && !window.matchMedia('(max-width: 640px)').matches);
     const face = character === 'default' ? null : MARKER_CHARACTERS.find(c => c.id === character);
     const [expandedStops, setExpandedStops] = React.useState<Set<number>>(new Set());
     const [detouredRoutes, setDetouredRoutes] = React.useState<Set<string>>(new Set());
@@ -246,26 +241,24 @@ function RouteCard({ option, index, weather, character, onStart }: {
 
     return (
         <div className="t-card" style={{ ...cardStyle, borderLeft: `4px solid ${getRouteColor(option.segments[0]?.routeNum)}` }}>
-            {index === 0 && (
-                <div className="t-ribbon" style={{
-                    fontSize: '11px', fontWeight: '600', color: '#137333',
-                    backgroundColor: '#e6f4ea', padding: '3px 10px', borderRadius: '8px',
-                    display: 'inline-block', marginBottom: '8px'
-                }}>
-                    ★ {CHARACTER_VOICE[character].recommended}
-                </div>
-            )}
-
             {/* Header — route badges and total time */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                    {index === 0 && (
+                        <span className="t-ribbon" title={CHARACTER_VOICE[character].recommended} style={{
+                            fontSize: '11px', fontWeight: 700, color: '#137333',
+                            backgroundColor: '#e6f4ea', padding: '2px 7px', borderRadius: '8px',
+                        }}>
+                            ★ {CHARACTER_VOICE[character].recommended}
+                        </span>
+                    )}
                     {option.segments.map((seg, i) => (
                         <span key={i} style={{ ...routeBadgeStyle, backgroundColor: getRouteColor(seg.routeNum) }}>
                             Route {seg.routeNum}
                         </span>
                     ))}
                     {option.transfers === 0 ? (
-                        <span style={directBadgeStyle}>✅ Direct</span>
+                        <span style={directBadgeStyle}>Direct</span>
                     ) : (
                         <span style={transferBadgeStyle}>🔄 {option.transfers} transfer</span>
                     )}
@@ -277,7 +270,7 @@ function RouteCard({ option, index, weather, character, onStart }: {
                                 backgroundColor: '#fce4e6', padding: '3px 8px', borderRadius: '8px',
                             }}
                         >
-                            ⚠️ Detour active
+                            ⚠️ Detour
                         </span>
                     )}
                     {weather && weather.walkMultiplier > 1.0 && (
@@ -311,8 +304,8 @@ function RouteCard({ option, index, weather, character, onStart }: {
             {option.isLivePrediction && option.waitTime !== undefined && (
                 <div style={{
                     display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '6px 10px', backgroundColor: 'var(--t-accent-soft)', borderRadius: '8px',
-                    marginBottom: '10px', fontSize: '12px', fontWeight: '500'
+                    padding: '4px 8px', backgroundColor: 'var(--t-accent-soft)', borderRadius: '8px',
+                    marginBottom: '6px', fontSize: '12px', fontWeight: '500'
                 }}>
                     {/* The character "says" the live update; Default keeps the plain green light */}
                     {face
@@ -339,8 +332,8 @@ function RouteCard({ option, index, weather, character, onStart }: {
             {!option.isLivePrediction && (
                 <div style={{
                     display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '6px 10px', backgroundColor: '#fff3e0', borderRadius: '8px',
-                    marginBottom: '10px', fontSize: '12px', fontWeight: '500'
+                    padding: '4px 8px', backgroundColor: '#fff3e0', borderRadius: '8px',
+                    marginBottom: '6px', fontSize: '12px', fontWeight: '500'
                 }}>
                     <span style={{ fontSize: '14px' }}>⏱️</span>
                     <span style={{ color: '#e65100' }}>Estimated time (no live bus data)</span>
@@ -568,7 +561,8 @@ const headerStyle: React.CSSProperties = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '8px 16px 10px',
+    gap: '6px',
+    padding: '8px 8px 8px 12px',
     borderBottom: '1px solid var(--t-border-soft)',
     backgroundColor: 'var(--t-surface-2)'
 };
@@ -584,7 +578,7 @@ const closeBtnStyle: React.CSSProperties = {
 };
 
 const contentStyle: React.CSSProperties = {
-    padding: '10px 14px',
+    padding: '6px 8px',
     overflowY: 'auto',
     flex: 1,
     WebkitOverflowScrolling: 'touch' as any,
@@ -601,15 +595,15 @@ const statusStyle: React.CSSProperties = {
 
 const cardStyle: React.CSSProperties = {
     backgroundColor: 'var(--t-surface-2)',
-    borderRadius: '12px',
-    padding: '14px',
-    marginBottom: '10px',
+    borderRadius: '10px',
+    padding: '8px 10px',
+    marginBottom: '6px',
     transition: 'box-shadow 0.2s'
 };
 
 const routeBadgeStyle: React.CSSProperties = {
     color: 'white',
-    padding: '3px 10px',
+    padding: '2px 8px',
     borderRadius: '12px',
     fontSize: '12px',
     fontWeight: '600'
@@ -618,7 +612,7 @@ const routeBadgeStyle: React.CSSProperties = {
 const directBadgeStyle: React.CSSProperties = {
     color: '#137333',
     backgroundColor: '#e6f4ea',
-    padding: '3px 8px',
+    padding: '2px 7px',
     borderRadius: '10px',
     fontSize: '11px',
     fontWeight: '500'
@@ -636,8 +630,8 @@ const transferBadgeStyle: React.CSSProperties = {
 const timelineStepStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: '10px',
-    padding: '5px 0',
+    gap: '8px',
+    padding: '2px 0',
     position: 'relative'
 };
 
@@ -683,13 +677,13 @@ const errorStyle: React.CSSProperties = {
 const liveStatusStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
-    height: '28px',
-    padding: '0 14px',
-    borderBottom: '1px solid var(--t-border-soft)',
+    gap: '5px',
+    marginLeft: 'auto',
     fontSize: '11px',
     color: '#5f6368',
-    flexShrink: 0,
+    whiteSpace: 'nowrap',
+    minWidth: 0,
+    overflow: 'hidden',
 };
 
 const liveDotStyle: React.CSSProperties = {

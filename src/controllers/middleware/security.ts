@@ -26,12 +26,16 @@ const limiters: Map<string, { count: number; resetAt: number }>[] = [];
 // shared store (Redis / Upstash) if the API is ever scaled to several instances.
 setInterval(() => { const now = Date.now(); for (const m of limiters) for (const [k, v] of m) if (v.resetAt <= now) m.delete(k); }, 60_000).unref();
 
-/** Allow `max` requests per `windowMs` from one address; answer 429 after that. */
-export function rateLimit(name: string, max: number, windowMs = 60_000) {
+/**
+ * Allow `max` requests per `windowMs` from one address; answer 429 after that.
+ * `keyOf` counts something else instead, e.g. the signed-in account (use after requireAuth), so a limit
+ * can't be dodged by switching networks and doesn't hit everyone sharing one address.
+ */
+export function rateLimit(name: string, max: number, windowMs = 60_000, keyOf: (req: Request) => string = clientIp) {
     const hits = new Map<string, { count: number; resetAt: number }>();
     limiters.push(hits);
     return (req: Request, res: Response, next: NextFunction): void => {
-        const key = clientIp(req), now = Date.now();
+        const key = keyOf(req), now = Date.now();
         let h = hits.get(key);
         if (!h || h.resetAt <= now) { h = { count: 0, resetAt: now + windowMs }; hits.set(key, h); }
         h.count++;
@@ -40,7 +44,7 @@ export function rateLimit(name: string, max: number, windowMs = 60_000) {
         if (h.count <= max) { next(); return; }
         res.setHeader('Retry-After', String(Math.ceil((h.resetAt - now) / 1000)));
         // one event per window per address, not one per blocked request
-        if (h.count === max + 1) void SecurityEventService.record({ type: 'rate_limited', severity: 'warning', ip: key, path: req.originalUrl, message: `Rate limit "${name}" exceeded` });
+        if (h.count === max + 1) void SecurityEventService.record({ type: 'rate_limited', severity: 'warning', ip: clientIp(req), userId: req.user?.id, path: req.originalUrl, message: `Rate limit "${name}" exceeded` });
         res.status(429).json({ error: 'Too many requests. Please slow down.' });
     };
 }
@@ -52,6 +56,9 @@ export function isPushEndpoint(v: unknown): v is string {
     try { const u = new URL(v); return u.protocol === 'https:' && !u.port && !u.username && PUSH_HOSTS.test(u.hostname); }
     catch { return false; }
 }
+
+/** Counts per signed-in account (falls back to the address if there is none). Use after requireAuth. */
+export const perAccount = (req: Request): string => req.user?.id ? `user:${req.user.id}` : clientIp(req);
 
 /* ── input checks ── */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

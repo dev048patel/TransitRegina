@@ -104,11 +104,13 @@ schedule('* * * * *', async () => {
 
         // ── Web Push (kept as secondary channel) ───────────────────────────
         if (vapidPublic && vapidPrivate) {
+            // Every rider's subscriptions in one query, not one query per scheduled trip
+            const { data: allSubs } = await serviceDb()
+                .from('push_subscriptions')
+                .select('user_id, endpoint, p256dh, auth_key')
+                .in('user_id', [...new Set(userIds)]);
             for (const s of schedules) {
-                const { data: subs } = await serviceDb()
-                    .from('push_subscriptions')
-                    .select('endpoint, p256dh, auth_key')
-                    .eq('user_id', s.user_id);
+                const subs = (allSubs ?? []).filter(sub => sub.user_id === s.user_id);
 
                 const departLabel = (s.depart_by ?? target).slice(0, 5);
                 const payload = JSON.stringify({

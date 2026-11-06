@@ -83,11 +83,10 @@ const fake = http.createServer((req, res) => {
         if (url.startsWith('/rest/v1/profiles') && req.method === 'GET' && single) {
             const id = /id=eq\.([0-9a-f-]+)/.exec(url)?.[1];
             const u = Object.values(TOKENS).find(t => t.id === id);
-            if (u && url.includes('select=terms_version')) {
-                return termsColumnMissing ? send(400, { code: '42703', message: 'column profiles.terms_version does not exist' })
-                    : send(200, { terms_version: u.terms === undefined ? TERMS : u.terms });
-            }
-            return u ? send(200, { role: u.role, account_status: u.status }) : send(406, { message: 'no rows' });
+            // requireAuth reads role, status and Terms agreement in one query (two if the terms column is missing)
+            if (u && url.includes('terms_version') && termsColumnMissing) return send(400, { code: '42703', message: 'column profiles.terms_version does not exist' });
+            if (u && url.includes('terms_version')) return send(200, { role: u.role, account_status: u.status, terms_version: u.terms === undefined ? TERMS : u.terms });
+            return u ? send(200, { role: u.role, account_status: u.status }) : send(406, { code: 'PGRST116', message: 'no rows' });
         }
         if (url.startsWith('/rest/v1/profiles') && req.method === 'GET' && url.includes('id=in.')) {
             const known = new Map(Object.values(TOKENS).map(t => [t.id, { id: t.id, full_name: null, email: `${t.role}-${t.id.slice(0, 4)}@example.com` }]));
@@ -975,4 +974,69 @@ test('the SMS service going quiet during alert hours is declared an outage autom
         assert.equal(await SmsOutageService.check(nineAm), null);
         assert.equal(calls.length, 0);
     } finally { SmsOutageService._setMailer(null); }
+});
+
+/* ── Fraud and crowd protections (Nov 2026 review) ── */
+
+test('only Canadian mobile numbers can get texts', async () => {
+    const { isValidPhone } = await import('../src/controllers/routes/sms.routes');
+    for (const ok of ['+13065550111', '+1 306-555-0111', '+1 (639) 555-0111', '+14165550111', '+16045550111', '+18675550111'])
+        assert.equal(isValidPhone(ok), true, ok);
+    // US and Caribbean +1 numbers are where SMS-pumping fraud sends paid texts
+    for (const bad of ['+12125550111', '+18765550111', '+12845550111', '+16495550111', '+1306555011', '+443065550111', '3065550111', ''])
+        assert.equal(isValidPhone(bad), false, bad);
+});
+
+test('a code is never sent to a number outside Canada, even if it is saved on the profile', async () => {
+    const v = fakeVerify();
+    answer = profileWith({ mobile_number: '+1 876-555-0111', mobile_verified: false });   // Jamaica
+    const r = await api('POST', '/api/sms/verify/send', { token: T.user });   // the admin's daily codes are used by the next test
+    assert.equal(r.status, 400);
+    assert.match(r.json.error, /only for Canadian mobile numbers/);
+    assert.equal(v.sent.length, 0, 'Twilio is not asked to text it');
+    phoneVerify._setClient(null);
+});
+
+test('each account gets a few codes a day, whichever network it uses', async () => {
+    const v = fakeVerify();
+    answer = profileWith({ mobile_number: '+1 306-555-0122', mobile_verified: false });
+    // five codes are sent, each from a different address, so the per-address limit never trips
+    for (let i = 0; i < 5; i++) assert.equal((await api('POST', '/api/sms/verify/send', { token: T.admin })).status, 200, `code ${i + 1}`);
+    const sixth = await api('POST', '/api/sms/verify/send', { token: T.admin });
+    assert.equal(sixth.status, 429, 'the sixth code that day is refused');
+    assert.equal(v.sent.length, 5, 'Twilio was asked only five times');
+    assert.equal((await api('POST', '/api/sms/verify/send', { token: T.user })).status, 200, 'another account is unaffected');
+    await settle();
+    assert.ok(events.recent().some(e => e.type === 'rate_limited' && /sms-verify-send-account/.test(e.message) && e.userId === ADMIN), 'recorded against the account');
+    phoneVerify._setClient(null);
+});
+
+test('the live bus feed has its own, much larger limit than the rest of the API', async () => {
+    // Every open map asks for /api/live every 1.5 s. Under the shared 3,000-a-minute cap, about 75 riders on one
+    // network (campus Wi-Fi, a mobile carrier) locked each other out of the map.
+    const ip = freshIp();
+    const live = await api('GET', '/api/live', { ip });
+    assert.equal(live.status, 200);
+    assert.equal(live.headers.get('ratelimit-limit'), String(40 * 600));
+    const other = await api('GET', '/api/routes', { ip });
+    assert.equal(other.headers.get('ratelimit-limit'), '3000', 'everything else keeps the shared cap');
+    assert.equal(other.headers.get('ratelimit-remaining'), '2999', 'live requests do not use up the shared cap');
+});
+
+test('a signed-in request reads the profile once, not twice', async () => {
+    await api('POST', '/api/sms/opt-out', { token: T.user });
+    const profileReads = calls.filter(c => c.method === 'GET' && c.url.startsWith('/rest/v1/profiles') && c.auth === T.user);
+    assert.equal(profileReads.length, 1, profileReads.map(c => c.url).join('\n'));
+    assert.match(decodeURIComponent(profileReads[0].url), /role,account_status,terms_version/);
+});
+
+test('the website enforces its Content Security Policy', async () => {
+    const { readFileSync } = await import('node:fs');
+    const conf = JSON.parse(readFileSync(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
+    const headers = Object.fromEntries(conf.headers[0].headers.map((h: { key: string; value: string }) => [h.key, h.value]));
+    assert.ok(headers['Content-Security-Policy'], 'enforced, not report-only');
+    assert.equal(headers['Content-Security-Policy-Report-Only'], undefined);
+    for (const rule of ["default-src 'self'", "frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'"])
+        assert.ok(headers['Content-Security-Policy'].includes(rule), rule);
+    assert.ok(!/script-src[^;]*'unsafe-inline'/.test(headers['Content-Security-Policy']), 'no inline scripts allowed');
 });

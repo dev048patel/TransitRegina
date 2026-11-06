@@ -36,9 +36,13 @@ export function createApp() {
     // gave Railway's own address, so every visitor shared the same rate limits.
     app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS) || 2);
     app.use(securityHeaders);
-    // A flood cap only. Many riders share one address (campus or mobile-carrier networks) and the map
-    // polls every 1.5 s, so this is generous; the sensitive endpoints have their own much lower limits.
-    app.use(rateLimit('all', 3000));
+    // A flood cap only; the sensitive endpoints have their own much lower limits. Many riders share one address
+    // (campus Wi-Fi, mobile carriers), and each open map asks for the live buses every 1.5 s (40 a minute), so the
+    // live feed has its own cap: under the shared one, about 75 riders on one network locked each other out.
+    // The live feed is one shared, cached copy, so serving it is cheap.
+    const allLimit = rateLimit('all', 3000);
+    const liveLimit = rateLimit('live', 40 * 600);   // ~600 open maps per address
+    app.use((req, res, next) => (req.method === 'GET' && req.path === '/api/live' ? liveLimit : allLimit)(req, res, next));
 
     app.use(cors({
         origin: (origin, callback) => {

@@ -36,7 +36,8 @@ const BG_STOPS = [
 
 export default function TransitBackground() {
     return (
-        <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+        <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
+            {/* overflow-hidden: the route lines run past the screen edge, which made phones scroll sideways */}
 
             {/* Layer 1: Square grid (paper-map feel) */}
             <div

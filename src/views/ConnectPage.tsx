@@ -93,7 +93,8 @@ function Timeline() {
             <Road progress={scrollYProgress} className="top-0 bottom-0 left-[42px] md:left-1/2" />
             <RidingBus progress={scrollYProgress} className="left-[42px] md:left-1/2 scale-[0.46] md:scale-100" {...OUR_BUS} />
 
-            <div className="space-y-12 py-6">
+            {/* overflow-x-clip: each stop slides in from 30px to the side; before it does, it made phones scroll sideways */}
+            <div className="space-y-12 py-6 overflow-x-clip">
                 {TIMELINE.map((stop, i) => (
                     <motion.div
                         key={stop.when}

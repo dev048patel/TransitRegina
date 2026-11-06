@@ -1,5 +1,5 @@
 /* StopDetailPanel — departure board showing all routes & predictions for a selected stop.
-   Compact on every device: a floating card (top right on desktop, under the navbar on phones), each route a
+   Compact on every device: a small top-right card (.map-card in App.css), each route a
    plain row with a colour bar, the next three departures shown and the rest one tap away. */
 import React, { useState } from 'react';
 import { StopDetailPanelProps } from '../../../models/components/StopDetailPanelProps';
@@ -14,11 +14,12 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
     const direction = directionOfStop(stop);
 
     return (
-        <div className="stop-detail-panel t-panel" style={panelStyle}>
-            {/* Header: name, then stop number · direction · when it was updated */}
+        <div className="stop-detail-panel map-card t-panel" style={panelStyle}>
+            {/* Header: name, then stop number and direction (when it was updated is on the refresh button) */}
             <div className="t-panel-header" style={headerStyle}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: '15px', color: '#202124', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {/* A long name wraps instead of making the card wider */}
+                    <div style={{ fontWeight: 700, fontSize: '15px', color: '#202124', lineHeight: 1.25 }}>
                         {stop.STOP_NAME}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px', fontSize: '11px', color: '#5f6368', whiteSpace: 'nowrap', overflow: 'hidden' }}>
@@ -31,10 +32,9 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
                                 {STOP_DIRECTION_ARROW[direction]} {STOP_DIRECTION_LABEL[direction]}
                             </span>
                         )}
-                        {lastRefreshed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>· updated {formatTimeAgo(lastRefreshed)}</span>}
                     </div>
                 </div>
-                <button onClick={handleRefresh} disabled={loading} title="Refresh departures" aria-label="Refresh departures"
+                <button onClick={handleRefresh} disabled={loading} title={lastRefreshed ? `Updated ${formatTimeAgo(lastRefreshed)} · refresh` : 'Refresh departures'} aria-label="Refresh departures"
                     style={{ ...iconBtnStyle, border: '1px solid var(--t-border)', opacity: loading ? 0.5 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
                     <span style={{ display: 'inline-block', animation: loading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
                 </button>
@@ -67,12 +67,6 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
 
             <style>{`
                 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                @media (min-width: 641px) {
-                    .stop-detail-panel { top: 58px !important; right: 10px !important; width: 360px !important; max-height: calc(100dvh - 72px) !important; }
-                }
-                @media (max-width: 640px) {
-                    .stop-detail-panel { top: 56px !important; left: 8px !important; right: 8px !important; max-height: 42dvh !important; }
-                }
             `}</style>
         </div>
     );

@@ -68,6 +68,11 @@ export const MapView: React.FC<MapViewProps> = ({
   // Phones and tablets: a tap on the map doesn't pick a destination
   const isTouch = useMemo(isTouchDevice, []);
 
+  // Whether the map has already been brought to the rider's first GPS fix. Kept here, not in UserLocationMarker:
+  // the GoogleMap below is rebuilt (its key) when a search or a trip moves the map, which also rebuilt the marker
+  // and pulled the map back to the rider at stop zoom. Anything that moves the map on purpose sets it too.
+  const riderCentered = useRef(false);
+
   // Theme the map screens to the chosen character; other pages keep the original colours
   useEffect(() => {
     applyCharacterTheme(character);
@@ -83,7 +88,7 @@ export const MapView: React.FC<MapViewProps> = ({
   };
   // Arriving from a stop page (/map?stop=0742): open that stop's departure board
   useEffect(() => {
-    if (linkedStop && isLoaded) handleStopClick(linkedStop);
+    if (linkedStop && isLoaded) { riderCentered.current = true; handleStopClick(linkedStop); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkedStop, isLoaded]);
 
@@ -95,6 +100,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // When a place is selected, also show the place bubble
   const handlePlaceSelectWithPopup = (place: any) => {
+    riderCentered.current = true;
     handlePlaceSelect(place);
     setShowInfoWindow(true);
     setShowBusSuggestions(false);
@@ -115,6 +121,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
     const picked = await handleMapPlacePick({ lat: e.latLng.lat(), lng: e.latLng.lng() }, placeId || undefined);
     if (!picked) return;
+    riderCentered.current = true;
     setShowInfoWindow(true);
     setShowBusSuggestions(false);
     setShowStopDetail(false);
@@ -129,6 +136,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // When a route card is clicked, start tracking and recenter to user GPS
   const handleSelectRoute = (option: TripOption) => {
+    riderCentered.current = true;
     setActiveTracking(option);
     setShowBusSuggestions(false);
     setShowTripPlanner(false);
@@ -169,7 +177,11 @@ export const MapView: React.FC<MapViewProps> = ({
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
-  }, []);
+    // A rebuilt map (new key after a search or a trip) starts at its own zoom without a zoom_changed event, so
+    // report it: otherwise the stop rule and bus size kept the old map's zoom (all stops drawn at zoom 15 on desktop)
+    const startZoom = map.getZoom();
+    if (startZoom != null) onZoomChanged(startZoom);
+  }, [onZoomChanged]);
 
   const handleZoomChanged = useCallback(() => {
     if (mapRef.current) {
@@ -337,7 +349,7 @@ export const MapView: React.FC<MapViewProps> = ({
         )}
 
         {/* User's live GPS location — chosen character marker */}
-        <UserLocationMarker />
+        <UserLocationMarker centeredRef={riderCentered} />
 
         {/* Live buses in their route colours, gliding between position reports */}
         {(activeTracking

@@ -5,7 +5,7 @@ This is Frontend Part, which controls behaviour of the map.
 3. Return prepared data for the View
 */
 import { useLoadScript } from '@react-google-maps/api';
-import { MapModel, Coordinates, MapOptions, isTouchDevice, WEATHER_ENABLED } from '../models/MapModel';
+import { MapModel, Coordinates, MapOptions, stopsFromZoom, WEATHER_ENABLED } from '../models/MapModel';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Stop } from '../models/transit/Stop';
 import transitRoutes from '../models/data/transitRoutes';
@@ -221,15 +221,15 @@ export const useMapController = (): MapControllerOutput => {
   // Show stops only when zoomed in enough (avoids marker lag at low zoom)
   // Route-selected stops also require zoom >= 14 to avoid clutter at city-wide view.
   // Phones and tablets show all stops from zoom 15 (a few blocks) so riders pinch in less to find one.
-  const touch = useMemo(isTouchDevice, []);
+  const stopsZoom = useMemo(stopsFromZoom, []);
   const visibleStops = useMemo(() => {
     if (selectedRoute && currentZoom >= 14) {
       const routeStopIds = getStopsForRoute(selectedRoute);
       return allStops.filter(stop => routeStopIds.has(stop.STOP_ID));
     }
-    if (currentZoom >= (touch ? 15 : 17)) return allStops;
+    if (currentZoom >= stopsZoom) return allStops;
     return [];
-  }, [allStops, selectedRoute, currentZoom, touch]);
+  }, [allStops, selectedRoute, currentZoom, stopsZoom]);
 
   // Source: src/newData/polyline_data/route_{N}_polyline.json (LineString [lat, lng])
   // Replaces the older transitShapes.json GeoJSON for displayed route polylines.

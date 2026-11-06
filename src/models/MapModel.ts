@@ -39,6 +39,10 @@ export const WEATHER_ENABLED = import.meta.env?.VITE_WEATHER_ENABLED === 'true';
 
 export const isTouchDevice = (): boolean => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
 
+/** The zoom from which every bus stop is drawn: 15 on phones and tablets, 17 on desktop. Used by the stop
+ *  rule (useMapController) and by the first zoom to the rider (UserLocationMarker), so riders land on stops. */
+export const stopsFromZoom = (): number => (isTouchDevice() ? 15 : 17);
+
 export const MapModel = {
   // Default Center (Regina)
   center: {

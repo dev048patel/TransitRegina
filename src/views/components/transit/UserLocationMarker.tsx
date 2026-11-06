@@ -9,12 +9,12 @@
  *  - direction cone while moving (GPS heading)
  *  - glides between fixes; greys out when the signal is lost
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { OverlayView, useGoogleMap } from '@react-google-maps/api';
 import { MARKER_CHARACTERS } from '../../../models/data/markerCharacters';
 import { useGpsFixController } from '../../../controllers/useGpsFixController';
 import { useMarkerCharacter } from '../../../controllers/useMarkerCharacter';
-import { MapModel } from '../../../models/MapModel';
+import { MapModel, stopsFromZoom } from '../../../models/MapModel';
 
 const GLIDE_MS = 800;
 const SIZE = 48;             // character size in px
@@ -76,13 +76,13 @@ function useAccuracyHalo(pos: { lat: number; lng: number } | null, radius: numbe
     }, [map, pos?.lat, pos?.lng, radius, lost]);
 }
 
-/** Neighbourhood level: the streets and buses around the rider, without losing the area around them */
-const NEAR_ME_ZOOM = 14;
 
 /** The first location after the map opens: bring the map to the rider, unless they are already zoomed in that
  *  close or are outside Regina (the map can't pan outside it). */
 function useCenterOnFirstFix(fix: { lat: number; lng: number } | null) {
     const map = useGoogleMap();
+    // Land where the stops are drawn, so the rider sees the stops around them straight away
+    const nearMeZoom = useMemo(stopsFromZoom, []);
     const done = useRef(false);
     useEffect(() => {
         if (!map || !fix || done.current) return;
@@ -91,12 +91,12 @@ function useCenterOnFirstFix(fix: { lat: number; lng: number } | null) {
         const inRegina = !b || (fix.lat <= b.north && fix.lat >= b.south && fix.lng >= b.west && fix.lng <= b.east);
         // Not "zoom > the default": on a tall phone screen Google itself raises the opening zoom (to ~13) so the
         // view fits inside Regina's bounds, which looked like the rider had zoomed in and skipped the move
-        if (!inRegina || (map.getZoom() ?? 0) >= NEAR_ME_ZOOM) return;
+        if (!inRegina || (map.getZoom() ?? 0) >= nearMeZoom) return;
         // Zoom first, then centre. The map is held inside Regina (strictBounds): at the opening zoom the view is
         // about as big as the city, so a new centre is snapped back to the middle. Zoomed in, it can move.
-        map.setZoom(NEAR_ME_ZOOM);
+        map.setZoom(nearMeZoom);
         map.setCenter(fix);
-    }, [map, fix]);
+    }, [map, fix, nearMeZoom]);
 }
 
 export default function UserLocationMarker() {

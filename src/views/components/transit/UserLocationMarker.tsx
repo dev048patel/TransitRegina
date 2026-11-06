@@ -79,8 +79,8 @@ function useAccuracyHalo(pos: { lat: number; lng: number } | null, radius: numbe
 /** Neighbourhood level: the streets and buses around the rider, without losing the area around them */
 const NEAR_ME_ZOOM = 14;
 
-/** The first location after the map opens: bring the map to the rider, if they haven't zoomed in themselves
- *  and they are inside Regina (the map can't pan outside it). */
+/** The first location after the map opens: bring the map to the rider, unless they are already zoomed in that
+ *  close or are outside Regina (the map can't pan outside it). */
 function useCenterOnFirstFix(fix: { lat: number; lng: number } | null) {
     const map = useGoogleMap();
     const done = useRef(false);
@@ -89,7 +89,9 @@ function useCenterOnFirstFix(fix: { lat: number; lng: number } | null) {
         done.current = true;
         const b = MapModel.options.restriction?.latLngBounds;
         const inRegina = !b || (fix.lat <= b.north && fix.lat >= b.south && fix.lng >= b.west && fix.lng <= b.east);
-        if (!inRegina || (map.getZoom() ?? 0) > MapModel.defaultZoom) return;
+        // Not "zoom > the default": on a tall phone screen Google itself raises the opening zoom (to ~13) so the
+        // view fits inside Regina's bounds, which looked like the rider had zoomed in and skipped the move
+        if (!inRegina || (map.getZoom() ?? 0) >= NEAR_ME_ZOOM) return;
         // Zoom first, then centre. The map is held inside Regina (strictBounds): at the opening zoom the view is
         // about as big as the city, so a new centre is snapped back to the middle. Zoomed in, it can move.
         map.setZoom(NEAR_ME_ZOOM);

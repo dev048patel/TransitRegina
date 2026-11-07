@@ -43,20 +43,73 @@ export default function TrackingPanel({ tripOption, walks, onStopTracking, onBac
     const live = tripOption.isLivePrediction && tripOption.waitTime !== undefined;
     const busIn = !live ? '' : tripOption.waitTime! <= 1 ? 'bus arriving now' : `bus in ~${tripOption.waitTime} min`;
 
-    return (
-        <div className="tracking-panel map-card map-card--no-nav t-panel" style={panelStyle}>
-            {/* Handle: tap to shrink to the summary or open the steps */}
-            <button
-                type="button"
-                onClick={() => setCollapsed(c => !c)}
-                aria-expanded={!collapsed}
-                aria-label={collapsed ? 'Show trip steps' : 'Hide trip steps'}
-                style={handleBtnStyle}
-            >
-                <ChevronDown size={16} style={{ transform: collapsed ? 'rotate(180deg)' : undefined, transition: 'transform 0.2s' }} aria-hidden />
-            </button>
+    // Your location → each bus → destination
+    const steps = (
+        <>
+            <Step time={formatTime(now)} color={BLUE} line={GREY} dashed title="Your location" />
+            <Step small color={GREY} line={GREY} dashed title={`Walk ${walkToStop} m`} />
 
-            {/* Summary: total time, arrival, routes, and the two actions */}
+            {tripOption.segments.map((seg, i) => {
+                const segColor = getRouteColor(seg.routeNum);
+                // Cumulative time of previous segments, for the fallback estimate
+                const prevSegmentsTotalTime = tripOption.segments.slice(0, i).reduce((acc, s) => acc + s.estimatedTime, 0);
+                // Live prediction when available, otherwise an estimate
+                const boardTime = calculateBoardTime(i, seg.predTime, walkToStopMinutes, tripOption.waitTime, prevSegmentsTotalTime, now);
+                const transferWalk = walks?.meters.transfers[i] ?? tripOption.transferWalkDistance;
+                const isLast = i === tripOption.segments.length - 1;
+                const nextSeg = tripOption.segments[i + 1];
+                const isWalkTransfer = !isLast && seg.toStop !== nextSeg?.fromStop;
+
+                return (
+                    <React.Fragment key={i}>
+                        <Step
+                            time={formatTime(boardTime)} color={segColor} line={segColor} thick
+                            title={seg.fromStop}
+                            detail={
+                                <>
+                                    <span style={{ ...routeBadgeStyle, backgroundColor: segColor, marginRight: '6px' }}>{seg.routeNum}</span>
+                                    <span>{seg.routeName}</span>{' '}
+                                    {i === 0 && seg.nextBusETA !== undefined && (
+                                        <span style={waitChipStyle}>{seg.nextBusETA <= 1 ? 'Now' : `~${seg.nextBusETA} min wait`}</span>
+                                    )}
+                                </>
+                            }
+                        />
+                        <Step small color={segColor} line={segColor} thick title={`Ride ~${seg.estimatedTime} min`} />
+                        {seg.turnaroundStop && (
+                            <Step small color={segColor} line={segColor} thick title={`Stay on as the bus turns round at ${seg.turnaroundStop}`} />
+                        )}
+                        <Step
+                            color={RED} line={isLast ? GREY : ORANGE} dashed
+                            title={seg.toStop}
+                            tag={<span style={{ color: '#c5221f', fontWeight: 600, whiteSpace: 'nowrap' }}>Get off</span>}
+                        />
+                        {!isLast && isWalkTransfer && transferWalk ? (
+                            <Step small color={GREY} line={GREY} dashed title={`Walk ${transferWalk} m to ${nextSeg?.fromStop}`} />
+                        ) : null}
+                        {!isLast && (
+                            <Step small color={ORANGE} line={ORANGE} dashed
+                                title={<span style={{ color: '#b06000', fontWeight: 600 }}>Transfer · wait ~5 min</span>} />
+                        )}
+                    </React.Fragment>
+                );
+            })}
+
+            {walkToDest > 0 && <Step small color={GREY} line={GREY} dashed title={`Walk ${walkToDest} m`} />}
+            <Step time={formatTime(arrivalTime)} color={GREEN} title="Arrive at destination" last />
+            {/* The walking paths are OpenStreetMap data, which asks for this credit where it is shown */}
+            {walks && (walks.meters.toStop !== undefined || walks.meters.toDest !== undefined) && (
+                <div style={{ fontSize: '10px', color: '#80868b', marginTop: '6px' }}>
+                    Walking paths ©{' '}
+                    <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>OpenStreetMap contributors</a>
+                </div>
+            )}
+        </>
+    );
+
+    return (
+        <div className={`tracking-panel map-card map-card--no-nav t-panel${collapsed ? '' : ' tracking-panel--open'}`} style={panelStyle}>
+            {/* Summary: total time, arrival, routes, and the two actions (always shown; everything below scrolls) */}
             <div className="t-panel-header" style={headerStyle}>
                 <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
@@ -87,6 +140,9 @@ export default function TrackingPanel({ tripOption, walks, onStopTracking, onBac
                 </div>
             </div>
 
+            {/* One scrolling area under the summary, so the steps get the room instead of being squeezed to a
+                sliver under the other boxes on a phone (the card is under half the screen tall there) */}
+            <div style={bodyStyle}>
             {/* Right now */}
             <div style={nowStyle} role="status">
                 {live && <span style={liveDotStyle} aria-hidden />}
@@ -98,6 +154,26 @@ export default function TrackingPanel({ tripOption, walks, onStopTracking, onBac
                     ) : null}
                 </span>
             </div>
+
+            {/* The steps to the destination: a labelled button, not just a chevron, so riders find them
+                (phones start with them hidden so the card covers less of the map) */}
+            <button
+                type="button"
+                onClick={() => setCollapsed(c => !c)}
+                aria-expanded={!collapsed}
+                aria-controls="tracking-steps"
+                style={stepsBtnStyle}
+            >
+                {collapsed ? 'Show trip steps' : 'Hide trip steps'}
+                <ChevronDown size={16} style={{ transform: collapsed ? undefined : 'rotate(180deg)', transition: 'transform 0.2s' }} aria-hidden />
+            </button>
+
+            {/* Step-by-step timeline */}
+            {!collapsed && (
+                <div id="tracking-steps" style={timelineStyle}>
+                    {steps}
+                </div>
+            )}
 
             {/* Text me this trip (admins only while it is being tried out; signed-out riders are asked to sign in) */}
             {texts.offered && texts.state !== 'declined' && (
@@ -131,73 +207,13 @@ export default function TrackingPanel({ tripOption, walks, onStopTracking, onBac
                 </div>
             )}
 
-            {/* Step-by-step timeline */}
-            {!collapsed && (
-                <div style={timelineStyle}>
-                    <Step time={formatTime(now)} color={BLUE} line={GREY} dashed title="Your location" />
-                    <Step small color={GREY} line={GREY} dashed title={`Walk ${walkToStop} m`} />
-
-                    {tripOption.segments.map((seg, i) => {
-                        const segColor = getRouteColor(seg.routeNum);
-                        // Cumulative time of previous segments, for the fallback estimate
-                        const prevSegmentsTotalTime = tripOption.segments.slice(0, i).reduce((acc, s) => acc + s.estimatedTime, 0);
-                        // Live prediction when available, otherwise an estimate
-                        const boardTime = calculateBoardTime(i, seg.predTime, walkToStopMinutes, tripOption.waitTime, prevSegmentsTotalTime, now);
-                        const transferWalk = walks?.meters.transfers[i] ?? tripOption.transferWalkDistance;
-                        const isLast = i === tripOption.segments.length - 1;
-                        const nextSeg = tripOption.segments[i + 1];
-                        const isWalkTransfer = !isLast && seg.toStop !== nextSeg?.fromStop;
-
-                        return (
-                            <React.Fragment key={i}>
-                                <Step
-                                    time={formatTime(boardTime)} color={segColor} line={segColor} thick
-                                    title={seg.fromStop}
-                                    detail={
-                                        <>
-                                            <span style={{ ...routeBadgeStyle, backgroundColor: segColor, marginRight: '6px' }}>{seg.routeNum}</span>
-                                            <span>{seg.routeName}</span>{' '}
-                                            {i === 0 && seg.nextBusETA !== undefined && (
-                                                <span style={waitChipStyle}>{seg.nextBusETA <= 1 ? 'Now' : `~${seg.nextBusETA} min wait`}</span>
-                                            )}
-                                        </>
-                                    }
-                                />
-                                <Step small color={segColor} line={segColor} thick title={`Ride ~${seg.estimatedTime} min`} />
-                                {seg.turnaroundStop && (
-                                    <Step small color={segColor} line={segColor} thick title={`Stay on as the bus turns round at ${seg.turnaroundStop}`} />
-                                )}
-                                <Step
-                                    color={RED} line={isLast ? GREY : ORANGE} dashed
-                                    title={seg.toStop}
-                                    tag={<span style={{ color: '#c5221f', fontWeight: 600, whiteSpace: 'nowrap' }}>Get off</span>}
-                                />
-                                {!isLast && isWalkTransfer && transferWalk ? (
-                                    <Step small color={GREY} line={GREY} dashed title={`Walk ${transferWalk} m to ${nextSeg?.fromStop}`} />
-                                ) : null}
-                                {!isLast && (
-                                    <Step small color={ORANGE} line={ORANGE} dashed
-                                        title={<span style={{ color: '#b06000', fontWeight: 600 }}>Transfer · wait ~5 min</span>} />
-                                )}
-                            </React.Fragment>
-                        );
-                    })}
-
-                    {walkToDest > 0 && <Step small color={GREY} line={GREY} dashed title={`Walk ${walkToDest} m`} />}
-                    <Step time={formatTime(arrivalTime)} color={GREEN} title="Arrive at destination" last />
-                    {/* The walking paths are OpenStreetMap data, which asks for this credit where it is shown */}
-                    {walks && (walks.meters.toStop !== undefined || walks.meters.toDest !== undefined) && (
-                        <div style={{ fontSize: '10px', color: '#80868b', marginTop: '6px' }}>
-                            Walking paths ©{' '}
-                            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>OpenStreetMap contributors</a>
-                        </div>
-                    )}
-                </div>
-            )}
+            </div>
 
             <style>{`
                 /* Phones: the back button is just its arrow, so the trip time has room */
                 @media (max-width: 640px) { .tracking-panel .tp-label { display: none; } }
+                /* Phones: with its steps open the card may grow past half the screen; the rider asked to see them */
+                @media (max-width: 640px) { .map-card.map-card--no-nav.tracking-panel--open { max-height: 75dvh !important; } }
                 @keyframes pulse {
                     0%, 100% { opacity: 1; transform: scale(1); }
                     50% { opacity: 0.6; transform: scale(1.2); }
@@ -262,16 +278,23 @@ const panelStyle: React.CSSProperties = {
     overflow: 'hidden',
 };
 
-const handleBtnStyle: React.CSSProperties = {
-    display: 'flex', justifyContent: 'center', alignItems: 'center',
-    width: '100%', height: '24px', flexShrink: 0,
-    border: 'none', background: 'transparent', color: '#80868b', cursor: 'pointer', padding: 0,
-};
-
 const headerStyle: React.CSSProperties = {
     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px',
-    padding: '0 14px 10px',
+    padding: '12px 14px 10px', flexShrink: 0,
     borderBottom: '1px solid var(--t-border-soft)',
+};
+
+/** Everything under the summary scrolls as one, so no box is squeezed to nothing */
+const bodyStyle: React.CSSProperties = {
+    flex: '1 1 auto', minHeight: 0, overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch' as any, overscrollBehavior: 'contain',
+};
+
+const stepsBtnStyle: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+    width: 'calc(100% - 24px)', margin: '0 12px 10px', height: '34px', borderRadius: '10px',
+    border: '1px solid var(--t-border)', background: 'var(--t-surface-2)', color: 'var(--t-primary)',
+    fontSize: '13.5px', fontWeight: 600, cursor: 'pointer',
 };
 
 const nowStyle: React.CSSProperties = {
@@ -288,9 +311,6 @@ const liveDotStyle: React.CSSProperties = {
 
 const timelineStyle: React.CSSProperties = {
     padding: '0 14px 12px',
-    overflowY: 'auto',
-    flex: 1,
-    WebkitOverflowScrolling: 'touch' as any,
 };
 
 const timeColStyle: React.CSSProperties = {

@@ -1,22 +1,23 @@
 {
+    // Type-checks the backend (npm run typecheck). Nothing is compiled: production and dev:server run the
+    // TypeScript directly with tsx, which strips types without checking them, so this is the only check.
+    // Same module settings as the frontend: the backend shares src/models with it, which uses import.meta.
     "extends": "./tsconfig.json",
     "compilerOptions": {
-        "module": "commonjs",
-        "moduleResolution": "node",
         "noEmit": true,
         "types": [
             "node",
             "express",
             "cors",
-            "dotenv"
+            "dotenv",
+            "vite/client"
         ]
     },
     "include": [
         "src/server.ts",
-        "src/routes/**/*",
+        "src/apiApp.ts",
+        "src/env.ts",
         "src/controllers/**/*",
-        "src/models/**/*",
-        "src/repositories/**/*",
-        "src/services/**/*"
+        "src/models/**/*"
     ]
 }

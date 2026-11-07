@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm run start          # Frontend dev server (Vite, port 3000)
 npm run start:server   # Backend Express server (port 3001 or Railway PORT)
-npm run dev:server     # Backend with nodemon hot-reload
-npm run build          # Production build → /build
+npm run dev:server     # Backend with hot-reload (tsx watch, same runtime as production)
+npm run typecheck      # Type-check frontend and backend (tsx in dev/prod never checks types)
+npm run build          # Production build → /build (type-checks the frontend first)
 npm run serve          # Preview production build locally
 npm run build:transit-data  # Regenerate src/models/data/ stops, routes and shapes from the GTFS feed in data/google_transit/
 npm test               # Backend tests (test/*.test.ts, node:test via tsx)
@@ -20,6 +21,14 @@ npm run build:timetable  # Rebuild data/timetable.json from data/google_transit/
 ```
 
 No lint scripts are configured.
+
+### Deploy checks (no GitHub Actions)
+
+The deploys check themselves, so a failing change never goes live:
+- **Railway (API, `railway.json`; SMS service, `services/sms/railway.json`):** the build command runs `npm run typecheck` and `npm test`; any failure fails the build and the running version stays up. The API also has a health check on `/api/status`.
+- **Vercel:** `npm run build` type-checks the frontend before building.
+
+Railway builds run with the live service's settings, so tests must never reach real services: `test/security.test.ts` clears every app setting before it starts, and the SMS tests replace them with fakes (`services/sms/test/fakes.ts`).
 
 ## Architecture
 

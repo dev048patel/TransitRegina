@@ -41,11 +41,10 @@
     "start:server": "tsx src/server.ts",
     "test": "tsx --test test/*.test.ts",
     "all": "concurrently -k -n server,client -c blue,green \"npm:start:server\" \"npm:start\"",
-    "build": "tsc -p tsconfig.json && vite build && tsx scripts/prerender.tsx",
+    "build": "vite build && tsx scripts/prerender.tsx",
     "serve": "vite preview",
     "build:transit-data": "node scripts/build-transit-data.mjs",
-    "dev:server": "tsx watch src/server.ts",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.json"
+    "dev:server": "cross-env TS_NODE_PROJECT=tsconfig.server.json nodemon src/server.ts"
   },
   "eslintConfig": {
     "extends": [

@@ -7,9 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm run start          # Frontend dev server (Vite, port 3000)
 npm run start:server   # Backend Express server (port 3001 or Railway PORT)
-npm run dev:server     # Backend with hot-reload (tsx watch, same runtime as production)
-npm run typecheck      # Type-check frontend and backend (tsx in dev/prod never checks types)
-npm run build          # Production build → /build (type-checks the frontend first)
+npm run dev:server     # Backend with nodemon hot-reload
+npm run build          # Production build → /build
 npm run serve          # Preview production build locally
 npm run build:transit-data  # Regenerate src/models/data/ stops, routes and shapes from the GTFS feed in data/google_transit/
 npm test               # Backend tests (test/*.test.ts, node:test via tsx)
@@ -21,25 +20,6 @@ npm run build:timetable  # Rebuild data/timetable.json from data/google_transit/
 ```
 
 No lint scripts are configured.
-
-### Deploy checks (no GitHub Actions)
-
-The deploys check themselves, so a failing change never goes live:
-- **Railway (API, `railway.json`; SMS service, `services/sms/railway.json`):** the build command runs `npm run typecheck` and `npm test`; any failure fails the build and the running version stays up. The API also has a health check on `/api/status`.
-- **Vercel:** `npm run build` type-checks the frontend before building.
-
-Railway builds run with the live service's settings, so tests must never reach real services: `test/security.test.ts` clears every app setting before it starts, and the SMS tests replace them with fakes (`services/sms/test/fakes.ts`).
-
-### Before committing or building (Claude: always do this)
-
-Run the same checks the deploys run, so a change that would fail the deploy is caught here first:
-
-1. **Dependencies:** run `npm ci` (in the repo root, and in `services/sms` if working there) when `package-lock.json` changed (after a pull, a merge, or adding/removing a package) or when `node_modules` is missing. Not on every build: it deletes and reinstalls `node_modules`.
-2. **Main app:** `npm run typecheck` and `npm test` in the repo root.
-3. **SMS service** (only if `services/sms/` changed): `npm run typecheck` and `npm test` inside `services/sms`.
-4. **Frontend build** (only if something under `src/views`, `src/controllers`, styling, `index.html`, `vite.config.ts` or `scripts/prerender.tsx` changed): `npm run build`.
-
-Don't commit while any of these fail; fix the cause, or tell the user what fails and why.
 
 ## Architecture
 

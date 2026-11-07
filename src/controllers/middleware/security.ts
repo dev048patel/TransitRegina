@@ -21,7 +21,8 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
     next();
 }
 
-const limiters: Map<string, { count: number; resetAt: number }>[] = [];
+type Hits = { count: number; resetAt: number; reported?: boolean };
+const limiters: Map<string, Hits>[] = [];
 // ponytail: counters live in this process's memory. Fine for one backend instance; move to a
 // shared store (Redis / Upstash) if the API is ever scaled to several instances.
 setInterval(() => { const now = Date.now(); for (const m of limiters) for (const [k, v] of m) if (v.resetAt <= now) m.delete(k); }, 60_000).unref();
@@ -30,21 +31,32 @@ setInterval(() => { const now = Date.now(); for (const m of limiters) for (const
  * Allow `max` requests per `windowMs` from one address; answer 429 after that.
  * `keyOf` counts something else instead, e.g. the signed-in account (use after requireAuth), so a limit
  * can't be dodged by switching networks and doesn't hit everyone sharing one address.
+ * `successesOnly` counts only requests that end well (status below 400): a quota of things actually done, like
+ * texts sent, so a rider whose attempts fail (no number yet, Twilio down) isn't locked out. The slot is taken
+ * when the request starts and given back if it fails, so a burst of parallel requests still can't pass `max`.
  */
-export function rateLimit(name: string, max: number, windowMs = 60_000, keyOf: (req: Request) => string = clientIp) {
-    const hits = new Map<string, { count: number; resetAt: number }>();
+export function rateLimit(name: string, max: number, windowMs = 60_000, keyOf: (req: Request) => string = clientIp, { successesOnly = false } = {}) {
+    const hits = new Map<string, Hits>();
     limiters.push(hits);
     return (req: Request, res: Response, next: NextFunction): void => {
         const key = keyOf(req), now = Date.now();
         let h = hits.get(key);
         if (!h || h.resetAt <= now) { h = { count: 0, resetAt: now + windowMs }; hits.set(key, h); }
-        h.count++;
+        // A success-only quota doesn't count the refused requests themselves, or refunds would never free a slot
+        const allowed = successesOnly ? h.count < max : h.count + 1 <= max;
+        if (allowed || !successesOnly) h.count++;
         res.setHeader('RateLimit-Limit', String(max));
         res.setHeader('RateLimit-Remaining', String(Math.max(0, max - h.count)));
-        if (h.count <= max) { next(); return; }
+        if (allowed) {
+            if (successesOnly) {
+                const slot = h;
+                res.on('finish', () => { if (res.statusCode >= 400 && hits.get(key) === slot && slot.count > 0) slot.count--; });
+            }
+            next(); return;
+        }
         res.setHeader('Retry-After', String(Math.ceil((h.resetAt - now) / 1000)));
         // one event per window per address, not one per blocked request
-        if (h.count === max + 1) void SecurityEventService.record({ type: 'rate_limited', severity: 'warning', ip: clientIp(req), userId: req.user?.id, path: req.originalUrl, message: `Rate limit "${name}" exceeded` });
+        if (!h.reported) { h.reported = true; void SecurityEventService.record({ type: 'rate_limited', severity: 'warning', ip: clientIp(req), userId: req.user?.id, path: req.originalUrl, message: `Rate limit "${name}" exceeded` }); }
         res.status(429).json({ error: 'Too many requests. Please slow down.' });
     };
 }

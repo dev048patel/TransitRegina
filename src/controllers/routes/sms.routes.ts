@@ -116,9 +116,10 @@ async function savedPhone(req: Request, res: Response): Promise<{ saved: string;
 // ── POST /api/sms/verify/send ───────────────────────────────────────────────
 // Texts a one-time code to the number on the rider's profile. Twilio Verify also limits codes per number.
 // Every code costs money, so besides the per-address limit each account gets a few a day (a script with many
-// addresses still can't pump texts).
+// addresses still can't pump texts). Only codes actually sent count: a failed attempt (no number on the profile,
+// a number outside Canada, Twilio down) costs nothing, so it must not lock the rider out for the day.
 const CODES_PER_ACCOUNT_PER_DAY = 5;
-router.post('/verify/send', requireAuth, rateLimit('sms-verify-send', 5), rateLimit('sms-verify-send-account', CODES_PER_ACCOUNT_PER_DAY, 24 * 60 * 60_000, perAccount), async (req: Request, res: Response) => {
+router.post('/verify/send', requireAuth, rateLimit('sms-verify-send', 5), rateLimit('sms-verify-send-account', CODES_PER_ACCOUNT_PER_DAY, 24 * 60 * 60_000, perAccount, { successesOnly: true }), async (req: Request, res: Response) => {
     const p = await savedPhone(req, res);
     if (!p) return;
     if (p.verified) { res.status(400).json({ error: 'This number is already verified' }); return; }

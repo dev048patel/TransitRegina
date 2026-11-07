@@ -184,5 +184,12 @@ export function useStopDetailController(stopId: string) {
         return [...activeGroups, ...inactiveGroups];
     }, [predictions, allRoutes]);
 
-    return { routeGroups, allRoutes, loading, error, lastRefreshed, handleRefresh: fetchPredictions };
+    // Every route that stops here, in route-number order, for the header. Known from the map data straight
+    // away, so it shows while departures are still loading (plus any route the predictions add).
+    const servingRoutes = useMemo(() => routeGroups
+        .map(g => ({ routeId: g.routeId, routeColor: g.routeColor }))
+        .sort((a, b) => a.routeId.localeCompare(b.routeId, undefined, { numeric: true })),
+        [routeGroups]);
+
+    return { routeGroups, allRoutes, servingRoutes, loading, error, lastRefreshed, handleRefresh: fetchPredictions };
 }

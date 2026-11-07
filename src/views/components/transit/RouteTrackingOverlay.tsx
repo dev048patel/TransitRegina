@@ -162,10 +162,11 @@ function extractShapeSegment(
     return best.segment;
 }
 
-export default function RouteTrackingOverlay({ tripOption, walks }: RouteTrackingOverlayProps) {
-    // Same GPS fix the character marker shows; this overlay draws no location dot of its own
+export default function RouteTrackingOverlay({ tripOption, walks, preview = false }: RouteTrackingOverlayProps) {
+    // Same GPS fix the character marker shows; this overlay draws no location dot of its own.
+    // A preview isn't being travelled, so it ignores the GPS and draws the trip as planned.
     const { fix } = useGpsFixController();
-    const userLocation = useMemo(() => fix && { lat: fix.lat, lng: fix.lng }, [fix]);
+    const userLocation = useMemo(() => !preview && fix ? { lat: fix.lat, lng: fix.lng } : null, [fix, preview]);
     const userPos = userLocation ?? { lat: tripOption.originLat, lng: tripOption.originLng };
     // The walk to the first stop, along sidewalks and paths from where the rider is now
     const walkToStop = useWalkToStopController(tripOption, userLocation, walks?.toStopPath ?? null);
@@ -244,7 +245,7 @@ export default function RouteTrackingOverlay({ tripOption, walks }: RouteTrackin
                 The leg the rider is on now is drawn on top at full strength: legs often overlap
                 (e.g. out to a terminus and back), and the later leg would otherwise cover it. */}
             {busSegmentPaths.map((path, i) => {
-                const isActive = i === activeSegmentIndex;
+                const isActive = preview || i === activeSegmentIndex;
                 return (
                     <PolylineF
                         key={`bus-seg-${i}`}
@@ -336,23 +337,23 @@ export default function RouteTrackingOverlay({ tripOption, walks }: RouteTrackin
                 const isWalkTransfer = !isLastSeg && seg.toStopId !== nextSeg?.fromStopId;
                 return (
                     <React.Fragment key={`stops-${i}`}>
-                        {/* Boarding stop marker */}
+                        {/* Boarding stop marker: the step number, or in a preview the bus to catch there */}
                         <Marker
                             position={{ lat: seg.fromStopLat, lng: seg.fromStopLng }}
-                            title={seg.fromStop}
+                            title={preview ? `Board Route ${seg.routeNum} at ${seg.fromStop}` : seg.fromStop}
                             icon={{
                                 path: (window as any).google?.maps?.SymbolPath?.CIRCLE,
-                                scale: 8,
+                                scale: preview ? 11 : 8,
                                 fillColor: getRouteColor(seg.routeNum),
                                 fillOpacity: 1,
                                 strokeWeight: 3,
                                 strokeColor: '#ffffff'
                             }}
                             label={{
-                                text: `${i + 1}`,
+                                text: preview ? seg.routeNum : `${i + 1}`,
                                 color: '#ffffff',
                                 fontWeight: 'bold',
-                                fontSize: '10px'
+                                fontSize: preview ? '11px' : '10px'
                             }}
                             zIndex={250}
                         />

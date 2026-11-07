@@ -10,7 +10,7 @@ import { directionOfStop, STOP_DIRECTION_ARROW, STOP_DIRECTION_LABEL } from '../
 const SHOWN = 3;
 
 export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps) {
-    const { routeGroups, loading, error, lastRefreshed, handleRefresh } = useStopDetailController(stop.STOP_ID);
+    const { routeGroups, servingRoutes, loading, error, lastRefreshed, handleRefresh } = useStopDetailController(stop.STOP_ID);
     const direction = directionOfStop(stop);
 
     return (
@@ -22,7 +22,8 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
                     <div style={{ fontWeight: 700, fontSize: '15px', color: '#202124', lineHeight: 1.25 }}>
                         {stop.STOP_NAME}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px', fontSize: '11px', color: '#5f6368', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                    {/* Stop number, direction, then every bus route that stops here; a busy stop's routes wrap to the next line */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px', marginTop: '3px', fontSize: '11px', color: '#5f6368', whiteSpace: 'nowrap' }}>
                         <span style={chipStyle}>Stop #{stop.STOP_ID}</span>
                         {direction && (
                             <span
@@ -30,6 +31,16 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
                                 style={{ ...chipStyle, fontWeight: 600, color: '#1a73e8', backgroundColor: '#e8f0fe' }}
                             >
                                 {STOP_DIRECTION_ARROW[direction]} {STOP_DIRECTION_LABEL[direction]}
+                            </span>
+                        )}
+                        {servingRoutes.length > 0 && (
+                            <span role="list" aria-label={`Routes at this stop: ${servingRoutes.map(r => r.routeId).join(', ')}`} style={{ display: 'contents' }}>
+                                {servingRoutes.map(r => (
+                                    <span key={r.routeId} role="listitem" title={`Route ${r.routeId} stops here`}
+                                        style={{ ...chipStyle, fontWeight: 700, color: 'white', backgroundColor: r.routeColor }}>
+                                        {r.routeId}
+                                    </span>
+                                ))}
                             </span>
                         )}
                     </div>

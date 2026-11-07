@@ -27,15 +27,31 @@ test('plans a real bus that arrives by the chosen time, not the next bus now', (
     for (const leg of journey.legs) assert.ok(leg.boardStop.name && leg.alightStop.name && leg.route);
 });
 
-test('offers backups: each further option arrives in time and earlier than the one before', () => {
+test('offers other ways to make the trip: different buses, each arriving in time, none beaten on every count', () => {
     const plan = ArriveByService.plan(HILLSDALE, EAST, 14 * 60 + 13, NOW);
     assert.equal(plan.status, 'planned');
     if (plan.status !== 'planned') return;
-    assert.ok(plan.journeys.length > 1, `${plan.journeys.length} option(s)`);
-    assert.ok(plan.journeys.length <= 3);
-    for (let i = 1; i < plan.journeys.length; i++) {
-        assert.ok(minutes(plan.journeys[i].arrive) < minutes(plan.journeys[i - 1].arrive), 'each backup arrives earlier');
+    const { journeys } = plan;
+    assert.ok(journeys.length > 1 && journeys.length <= 5, `${journeys.length} option(s)`);
+    assert.equal(journeys[0].kind, 'best');
+    const routes = (j: typeof journeys[number]) => j.legs.map(l => l.route).join('>');
+    const others = journeys.filter(j => j.kind === 'other');
+    assert.ok(others.length >= 1, 'at least one other set of routes');
+    assert.equal(new Set(journeys.filter(j => j.kind !== 'earlier').map(routes)).size, journeys.length - journeys.filter(j => j.kind === 'earlier').length, 'each option is a different set of buses');
+    for (const j of journeys) {
+        assert.ok(minutes(j.arrive) <= 14 * 60 + 13, `${routes(j)} arrives ${j.arrive}, by 2:13 PM`);
+        assert.equal(j.totalMin, minutes(j.arrive) - minutes(j.leave));
+        for (const leg of j.legs) {
+            assert.ok(Number.isFinite(leg.boardStop.lat) && Number.isFinite(leg.alightStop.lng), 'stops carry their position for the map');
+            assert.ok(Array.isArray(leg.stopsBetween));
+        }
     }
+    for (const j of others) {
+        const beaten = journeys.some(k => k !== j && minutes(k.leave) >= minutes(j.leave) && minutes(k.arrive) <= minutes(j.arrive) && k.legs.length <= j.legs.length);
+        assert.ok(!beaten, `${routes(j)} is beaten by another option on leave, arrival and buses`);
+    }
+    // The best one leaves latest of all
+    for (const j of journeys) assert.ok(minutes(j.leave) <= minutes(journeys[0].leave) || j.kind === 'best');
 });
 
 test('a time that has already passed today plans for tomorrow', () => {

@@ -4,7 +4,8 @@
  */
 import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
-import { Coordinates, isTouchDevice } from '../models/MapModel';
+import { Coordinates, isTouchDevice, MapModel } from '../models/MapModel';
+import { viewForPoints } from '../models/MapFit';
 import { TripOption } from '../models/transit/RoutePlanning';
 import { BusPosition } from '../models/transit/BusPosition';
 import { Stop } from '../models/transit/Stop';
@@ -24,6 +25,9 @@ import { useTripWalksController } from '../controllers/useWalkPathsController';
 import { stopIconFor } from '../models/data/stopIcons';
 import { applyCharacterTheme } from '../models/data/characterThemes';
 import PlaceBubble, { destinationPinFor } from './components/transit/PlaceBubble';
+
+/** On phones the suggestions card covers this share of the screen height while a trip is previewed (App.css) */
+const PREVIEW_CARD_PHONE = 0.3;
 
 /*
  -> <MapView isLoaded={...} center={...} />
@@ -59,6 +63,8 @@ export const MapView: React.FC<MapViewProps> = ({
   const [activeTracking, setActiveTracking] = useState<TripOption | null>(null);
   // The tracked trip's walks along sidewalks and paths, for the map and the panel's walk times
   const trackingWalks = useTripWalksController(activeTracking);
+  // A trip planned for later, previewed on the map from the suggestions panel ("Preview on map")
+  const [previewTrip, setPreviewTrip] = useState<TripOption | null>(null);
   const [selectedBus, setSelectedBus] = useState<BusPosition | null>(null);
   const [selectedStop, setSelectedStop] = useState<Stop | null>(null);
   const [showStopDetail, setShowStopDetail] = useState(false);
@@ -136,6 +142,31 @@ export const MapView: React.FC<MapViewProps> = ({
     setShowInfoWindow(false);
     setShowBusSuggestions(false);
   }, [setSelectedPlaceMarker]);
+
+  // The previewed trip, while the suggestions panel that chose it is open and nothing is tracked
+  const shownPreview = showBusSuggestions && !activeTracking ? previewTrip : null;
+  const previewWalks = useTripWalksController(shownPreview);
+  // Whole trip in view: start, every stop, destination, clear of the panel (top right; on phones the top of the screen)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!shownPreview || !map) return;
+    riderCentered.current = true;
+    const points = [
+      { lat: shownPreview.originLat, lng: shownPreview.originLng },
+      { lat: shownPreview.destLat, lng: shownPreview.destLng },
+      ...shownPreview.segments.flatMap(s => [{ lat: s.fromStopLat, lng: s.fromStopLng }, { lat: s.toStopLat, lng: s.toStopLng }]),
+    ];
+    const phone = window.matchMedia('(max-width: 640px)').matches;
+    const { clientWidth: width, clientHeight: height } = map.getDiv();
+    // Not map.fitBounds: held inside Regina, it can land the trip under the card on a phone (see MapFit)
+    const view = viewForPoints(points, width, height, phone
+      ? { top: Math.round(54 + height * PREVIEW_CARD_PHONE + 16), bottom: 30, left: 30, right: 30 }
+      : { top: 70, bottom: 40, left: 40, right: 390 },
+      { maxZoom: 16, restriction: MapModel.options.restriction?.latLngBounds });
+    if (!view) return;
+    map.setZoom(view.zoom);
+    map.setCenter(view.center);
+  }, [shownPreview]);
 
   // When a route card is clicked, start tracking and recenter to user GPS
   const handleSelectRoute = (option: TripOption) => {
@@ -242,6 +273,7 @@ export const MapView: React.FC<MapViewProps> = ({
           }}
           onClose={() => setShowBusSuggestions(false)}
           onSelectRoute={handleSelectRoute}
+          onPreviewTrip={setPreviewTrip}
           liveBuses={liveBuses}
           weather={weather}
           character={character}
@@ -282,8 +314,13 @@ export const MapView: React.FC<MapViewProps> = ({
           <RouteTrackingOverlay tripOption={activeTracking} walks={trackingWalks} />
         )}
 
+        {/* A trip planned for later, previewed: the walks, the buses and their stops */}
+        {shownPreview && (
+          <RouteTrackingOverlay tripOption={shownPreview} walks={previewWalks} preview />
+        )}
+
         {/* Render Stops — viewport-culled, hidden during tracking */}
-        {!activeTracking && viewportStops.map((stop) => (
+        {!activeTracking && !shownPreview && viewportStops.map((stop) => (
           <Marker
             key={stop.STOP_ID}
             position={{
@@ -301,7 +338,7 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Render Route Polylines (hide during tracking) */}
-        {!activeTracking && routePaths.map((path, index) => (
+        {!activeTracking && !shownPreview && routePaths.map((path, index) => (
           <Polyline
             key={index}
             path={path}
@@ -328,7 +365,7 @@ export const MapView: React.FC<MapViewProps> = ({
         ))}
 
         {/* Selected place: themed flag pin + the character's speech bubble */}
-        {selectedPlaceMarker && !activeTracking && (
+        {selectedPlaceMarker && !activeTracking && !shownPreview && (
           <Marker
             position={selectedPlaceMarker.location}
             title={selectedPlaceMarker.name}
@@ -355,9 +392,9 @@ export const MapView: React.FC<MapViewProps> = ({
         <UserLocationMarker centeredRef={riderCentered} />
 
         {/* Live buses in their route colours, gliding between position reports */}
-        {(activeTracking
+        {(activeTracking || shownPreview
           ? liveBuses.filter(bus => {
-            const trackingRoutes = new Set(activeTracking.segments.map(s => s.routeNum));
+            const trackingRoutes = new Set((activeTracking ?? shownPreview)!.segments.map(s => s.routeNum));
             return trackingRoutes.has(String(bus.route_num));
           })
           : liveBuses

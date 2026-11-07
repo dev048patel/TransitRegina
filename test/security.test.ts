@@ -127,8 +127,14 @@ async function api(method: string, p: string, opts: { token?: string; body?: unk
 /** Calls made with the backend's own key, other than writing the security event log itself. */
 const backendWrites = () => calls.filter(c => c.auth === 'service-key' && c.method !== 'GET' && !c.url.startsWith('/rest/v1/security_events'));
 const settle = () => new Promise(r => setTimeout(r, 30));   // events are recorded without blocking the response
+/** The backend's own settings (everything it reads from process.env), as opposed to the system's (PATH, TEMP…) */
+const APP_SETTING = /^(VITE_|SUPABASE|TWILIO|RESEND|ALERT|SMS_|VAPID|TRANSIT_LIVE|BACKEND_URL|ROUTE_OVERRIDES|TRUST_PROXY|LEGACY_SMS|RUN_SCHEDULED|APP_URL|DATABASE)/;
 
 before(async () => {
+    // These tests also run inside the Railway build (railway.json), where the live service's settings are set.
+    // Clear every app setting first so nothing below can reach real Supabase, Twilio, Resend or the SMS service,
+    // including settings added later; the test sets only fakes after this.
+    for (const k of Object.keys(process.env)) if (APP_SETTING.test(k)) delete process.env[k];
     await new Promise<void>(r => fake.listen(0, '127.0.0.1', r));
     process.env.VITE_SUPABASE_URL = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
     process.env.VITE_SUPABASE_ANON_KEY = 'anon-key';

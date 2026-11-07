@@ -12,7 +12,7 @@ import { useTripTextsController } from '../../../controllers/useTripTextsControl
 const BLUE = '#4285F4', GREY = '#5f6368', RED = '#ea4335', ORANGE = '#e37400', GREEN = '#34a853';
 
 // Pure view component — time calculations delegated to TimeService
-export default function TrackingPanel({ tripOption, onStopTracking, onBack, destinationName }: TrackingPanelProps) {
+export default function TrackingPanel({ tripOption, walks, onStopTracking, onBack, destinationName }: TrackingPanelProps) {
     // Phones start with the summary only, so the card doesn't cover the rider on the map; the handle opens the steps
     const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 640px)').matches);
     const texts = useTripTextsController(tripOption, destinationName);
@@ -21,10 +21,17 @@ export default function TrackingPanel({ tripOption, onStopTracking, onBack, dest
     const backToRoutes = onBack && (() => { void texts.stop(); onBack(); });
 
     const now = new Date();
-    const effectiveTime = tripOption.totalTimeWithWait ?? tripOption.totalTime;
+    // The planner measured walks as straight lines; once the real paths are known (along sidewalks and paths),
+    // their distances and the minutes they add replace those estimates
+    const effectiveTime = (tripOption.totalTimeWithWait ?? tripOption.totalTime) + (walks?.extraMinutes ?? 0);
     const arrivalTime = calculateArrivalTime(effectiveTime);
     const first = tripOption.segments[0];
-    const walkToStop = tripOption.walkToFirstStop ?? tripOption.walkingDistance;
+    const plannedToStop = tripOption.walkToFirstStop ?? tripOption.walkingDistance;
+    const walkToStop = walks?.meters.toStop ?? plannedToStop;
+    const walkToDest = walks?.meters.toDest
+        ?? Math.max(0, tripOption.walkingDistance - plannedToStop - (tripOption.transferWalkDistance ?? 0));
+    // Only the walk to the first stop comes before boarding
+    const walkToStopMinutes = Math.round((walkToStop / 1000) / 5 * 60);
 
     // Look up official bus route color from transit color data
     const getRouteColor = (routeNum: string): string => {
@@ -132,11 +139,11 @@ export default function TrackingPanel({ tripOption, onStopTracking, onBack, dest
 
                     {tripOption.segments.map((seg, i) => {
                         const segColor = getRouteColor(seg.routeNum);
-                        const walkMinutes = Math.round((tripOption.walkingDistance / 1000) / 5 * 60);
                         // Cumulative time of previous segments, for the fallback estimate
                         const prevSegmentsTotalTime = tripOption.segments.slice(0, i).reduce((acc, s) => acc + s.estimatedTime, 0);
                         // Live prediction when available, otherwise an estimate
-                        const boardTime = calculateBoardTime(i, seg.predTime, walkMinutes, tripOption.waitTime, prevSegmentsTotalTime, now);
+                        const boardTime = calculateBoardTime(i, seg.predTime, walkToStopMinutes, tripOption.waitTime, prevSegmentsTotalTime, now);
+                        const transferWalk = walks?.meters.transfers[i] ?? tripOption.transferWalkDistance;
                         const isLast = i === tripOption.segments.length - 1;
                         const nextSeg = tripOption.segments[i + 1];
                         const isWalkTransfer = !isLast && seg.toStop !== nextSeg?.fromStop;
@@ -165,8 +172,8 @@ export default function TrackingPanel({ tripOption, onStopTracking, onBack, dest
                                     title={seg.toStop}
                                     tag={<span style={{ color: '#c5221f', fontWeight: 600, whiteSpace: 'nowrap' }}>Get off</span>}
                                 />
-                                {!isLast && isWalkTransfer && tripOption.transferWalkDistance ? (
-                                    <Step small color={GREY} line={GREY} dashed title={`Walk ${tripOption.transferWalkDistance} m to ${nextSeg?.fromStop}`} />
+                                {!isLast && isWalkTransfer && transferWalk ? (
+                                    <Step small color={GREY} line={GREY} dashed title={`Walk ${transferWalk} m to ${nextSeg?.fromStop}`} />
                                 ) : null}
                                 {!isLast && (
                                     <Step small color={ORANGE} line={ORANGE} dashed
@@ -176,7 +183,15 @@ export default function TrackingPanel({ tripOption, onStopTracking, onBack, dest
                         );
                     })}
 
+                    {walkToDest > 0 && <Step small color={GREY} line={GREY} dashed title={`Walk ${walkToDest} m`} />}
                     <Step time={formatTime(arrivalTime)} color={GREEN} title="Arrive at destination" last />
+                    {/* The walking paths are OpenStreetMap data, which asks for this credit where it is shown */}
+                    {walks && (walks.meters.toStop !== undefined || walks.meters.toDest !== undefined) && (
+                        <div style={{ fontSize: '10px', color: '#80868b', marginTop: '6px' }}>
+                            Walking paths ©{' '}
+                            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>OpenStreetMap contributors</a>
+                        </div>
+                    )}
                 </div>
             )}
 

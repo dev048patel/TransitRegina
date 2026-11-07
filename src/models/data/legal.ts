@@ -53,6 +53,7 @@ export const LEGAL_PAGES: Record<'about' | 'privacy' | 'terms', LegalPageContent
                     `Schedules, routes and stops: the City of Regina's open data. Contains information licensed under the ${SITE.licenceName}.`,
                     "Live bus positions and arrival times: the live vehicle locations Regina Transit publishes for riders. They are estimates and can be late, missing or wrong.",
                     'Maps and place search: Google Maps.',
+                    'Walking paths to and from stops: map data © OpenStreetMap contributors, available under the Open Database License (openstreetmap.org/copyright).',
                     'Weather: Environment and Climate Change Canada, licensed under the Open Government Licence – Canada.',
                 ],
             },

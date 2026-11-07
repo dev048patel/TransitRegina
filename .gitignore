@@ -44,3 +44,6 @@ route-overrides.json
 # (docs/security holds the Supabase SQL scripts and setup notes; docs/owner-actions holds the to-do list.)
 /docs/security/
 /docs/owner-actions/
+
+# OpenStreetMap download for the walking graph (scripts/build-walk-graph.mjs); the built graph is committed
+/data/osm

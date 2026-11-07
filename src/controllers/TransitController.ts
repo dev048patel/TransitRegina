@@ -9,6 +9,7 @@ import { TransitService } from '../models/services/TransitService';
 import { RealTimeService } from '../models/services/RealTimeService';
 import { ArriveByService } from '../models/services/ArriveByService';
 import { StopPredictionService } from '../models/services/StopPredictionService';
+import { WalkRouteService } from '../models/services/WalkRouteService';
 import { setOverride } from '../models/services/routeOverrides';
 import { SecurityEventService } from '../models/services/SecurityEventService';
 import { clientIp, isText, reject } from './middleware/security';
@@ -92,6 +93,26 @@ export const planArriveBy = (req: Request, res: Response) => {
     } catch (error) {
         console.error('Controller Error planning arrive-by trip:', error);
         res.status(500).json({ error: 'Failed to plan the trip' });
+    }
+};
+
+// getWalkRoute : the walking path between two points, along sidewalks, paths and streets (not through buildings).
+// POST /api/walk { from: { lat, lng }, to: { lat, lng } } → { route: { path, meters } | null }
+// A POST so the rider's location travels in the body, never in a URL that logs and security events record.
+// route is null when either point is too far from any walkable way; the map then draws a straight line.
+export const getWalkRoute = (req: Request, res: Response) => {
+    const point = (v: unknown) => {
+        const p = v as { lat?: unknown; lng?: unknown } | null;
+        const lat = Number(p?.lat), lng = Number(p?.lng);
+        return typeof p === 'object' && p !== null && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+    };
+    const from = point(req.body?.from), to = point(req.body?.to);
+    if (!from || !to) { reject(req, res, 'from and to must each be { lat, lng }'); return; }
+    try {
+        res.json({ route: WalkRouteService.route(from, to) });
+    } catch (error) {
+        console.error('Controller Error finding a walking route:', error);
+        res.status(500).json({ error: 'Failed to find a walking route' });
     }
 };
 

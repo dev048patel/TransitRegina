@@ -1069,3 +1069,27 @@ test('parallel code requests cannot get past the daily quota', async () => {
     assert.equal(v.sent.length, 2);
     phoneVerify._setClient(null);
 });
+
+/* ── Walking paths (POST /api/walk) ── */
+
+test('the walking path between two points follows the walkable ways', async () => {
+    const from = { lat: 50.4320, lng: -104.6050 }, to = { lat: 50.4330, lng: -104.6175 };   // across Wascana Lake
+    const r = await api('POST', '/api/walk', { body: { from, to } });
+    assert.equal(r.status, 200);
+    assert.ok(r.json.route.path.length > 2, 'more than a straight line');
+    assert.deepEqual(r.json.route.path[0], from);
+    assert.ok(r.json.route.meters > 1000);
+    assert.equal(r.headers.get('ratelimit-limit'), '120');
+});
+
+test('a walking path request needs two points, and the location never goes in a URL', async () => {
+    for (const body of [{}, { from: { lat: 50.43 }, to: { lat: 50.44, lng: -104.6 } }, { from: '50.43,-104.6', to: '50.44,-104.6' }, { from: { lat: 'x', lng: 1 }, to: { lat: 1, lng: 1 } }])
+        assert.equal((await api('POST', '/api/walk', { body })).status, 400, JSON.stringify(body));
+    assert.equal((await api('GET', '/api/walk?from=50.43,-104.6&to=50.44,-104.6')).status, 404, 'no GET form');
+});
+
+test('no walking path far from any walkable way: the map keeps its straight line', async () => {
+    const r = await api('POST', '/api/walk', { body: { from: { lat: 50.37, lng: -104.80 }, to: { lat: 50.4495, lng: -104.6125 } } });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.route, null);
+});

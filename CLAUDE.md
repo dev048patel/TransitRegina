@@ -30,6 +30,17 @@ The deploys check themselves, so a failing change never goes live:
 
 Railway builds run with the live service's settings, so tests must never reach real services: `test/security.test.ts` clears every app setting before it starts, and the SMS tests replace them with fakes (`services/sms/test/fakes.ts`).
 
+### Before committing or building (Claude: always do this)
+
+Run the same checks the deploys run, so a change that would fail the deploy is caught here first:
+
+1. **Dependencies:** run `npm ci` (in the repo root, and in `services/sms` if working there) when `package-lock.json` changed (after a pull, a merge, or adding/removing a package) or when `node_modules` is missing. Not on every build: it deletes and reinstalls `node_modules`.
+2. **Main app:** `npm run typecheck` and `npm test` in the repo root.
+3. **SMS service** (only if `services/sms/` changed): `npm run typecheck` and `npm test` inside `services/sms`.
+4. **Frontend build** (only if something under `src/views`, `src/controllers`, styling, `index.html`, `vite.config.ts` or `scripts/prerender.tsx` changed): `npm run build`.
+
+Don't commit while any of these fail; fix the cause, or tell the user what fails and why.
+
 ## Architecture
 
 This is a full-stack real-time transit tracking app for Regina, Saskatchewan. The frontend is React 19 + TypeScript + Vite; the backend is Express 5 + TypeScript. Both run separately in dev and are deployed independently (Railway for backend, Vercel for frontend).

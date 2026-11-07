@@ -11,7 +11,7 @@ import { supabase } from './supabase';
 const BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
 /** The only endpoints that work without a login; every other one answers 401 to a signed-out caller. */
-const PUBLIC_PATHS = ['/api/analytics/beacon', '/api/analytics/heartbeat', '/api/auth/login-mobile', '/api/plan/arrive-by'];
+const PUBLIC_PATHS = ['/api/analytics/beacon', '/api/analytics/heartbeat', '/api/auth/login-mobile', '/api/plan/arrive-by', '/api/walk'];
 
 async function authHeaders(path: string): Promise<Record<string, string>> {
     const { data: { session } } = await supabase.auth.getSession();

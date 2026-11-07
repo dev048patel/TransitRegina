@@ -8,7 +8,7 @@
  * - Highlights the bus leg the rider is currently on (useTripProgressController)
  */
 import React, { useState, useEffect, useMemo } from 'react';
-import { Marker, Polyline } from '@react-google-maps/api';
+import { Marker, PolylineF } from '@react-google-maps/api';
 import transitShapesData from '../../../models/data/transitShapes.json';
 import transitColors from '../../../models/data/transitColors';
 import { RouteTrackingOverlayProps } from '../../../models/transit/RouteTrackingOverlayProps';
@@ -17,6 +17,7 @@ import { ActiveDetour } from '../../../models/transit/Detour';
 import { useTripProgressController } from '../../../controllers/useTripProgressController';
 import { useGpsFixController } from '../../../controllers/useGpsFixController';
 import { useRidePathsController } from '../../../controllers/useRidePathsController';
+import { useWalkToStopController } from '../../../controllers/useWalkPathsController';
 
 /** Squared distance between two points (no need for sqrt for comparison). */
 function distSq(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -161,11 +162,13 @@ function extractShapeSegment(
     return best.segment;
 }
 
-export default function RouteTrackingOverlay({ tripOption }: RouteTrackingOverlayProps) {
+export default function RouteTrackingOverlay({ tripOption, walks }: RouteTrackingOverlayProps) {
     // Same GPS fix the character marker shows; this overlay draws no location dot of its own
     const { fix } = useGpsFixController();
     const userLocation = useMemo(() => fix && { lat: fix.lat, lng: fix.lng }, [fix]);
     const userPos = userLocation ?? { lat: tripOption.originLat, lng: tripOption.originLng };
+    // The walk to the first stop, along sidewalks and paths from where the rider is now
+    const walkToStop = useWalkToStopController(tripOption, userLocation, walks?.toStopPath ?? null);
     const { activeSegmentIndex } = useTripProgressController(tripOption, userLocation);
     const [activeDetours, setActiveDetours] = useState<ActiveDetour[]>([]);
 
@@ -183,14 +186,15 @@ export default function RouteTrackingOverlay({ tripOption }: RouteTrackingOverla
     const firstSeg = tripOption.segments[0];
     const lastSeg = tripOption.segments[tripOption.segments.length - 1];
 
-    // Walking path: user → first bus stop
-    const walkToStopPath = [
+    // Walking paths follow sidewalks and paths (useWalkPathsController); a straight line until one arrives, or
+    // if there is none. User → first bus stop (nothing once they've reached it):
+    const walkToStopPath = walkToStop.done ? [] : walkToStop.path ?? [
         userPos,
         { lat: firstSeg.fromStopLat, lng: firstSeg.fromStopLng }
     ];
 
-    // Walking path: last bus stop → destination
-    const walkToDestPath = [
+    // Last bus stop → destination
+    const walkToDestPath = walks?.toDestPath ?? [
         { lat: lastSeg.toStopLat, lng: lastSeg.toStopLng },
         { lat: tripOption.destLat, lng: tripOption.destLng }
     ];
@@ -215,7 +219,7 @@ export default function RouteTrackingOverlay({ tripOption }: RouteTrackingOverla
     return (
         <>
             {/* Walking to first bus stop (dotted line) */}
-            <Polyline
+            <PolylineF
                 path={walkToStopPath}
                 options={{
                     strokeColor: '#5f6368',
@@ -242,7 +246,7 @@ export default function RouteTrackingOverlay({ tripOption }: RouteTrackingOverla
             {busSegmentPaths.map((path, i) => {
                 const isActive = i === activeSegmentIndex;
                 return (
-                    <Polyline
+                    <PolylineF
                         key={`bus-seg-${i}`}
                         path={path}
                         options={{
@@ -258,7 +262,7 @@ export default function RouteTrackingOverlay({ tripOption }: RouteTrackingOverla
             {/* Active detour polylines — drawn on top of route segments so users see the
                 actual path the bus is taking when their route is detoured */}
             {activeDetours.map((detour) => (
-                <Polyline
+                <PolylineF
                     key={`tracking-detour-${detour.detourId}`}
                     path={detour.path}
                     options={{
@@ -274,12 +278,12 @@ export default function RouteTrackingOverlay({ tripOption }: RouteTrackingOverla
             {tripOption.segments.slice(0, -1).map((seg, i) => {
                 const nextSeg = tripOption.segments[i + 1];
                 if (seg.toStopId === nextSeg.fromStopId) return null; // same stop, nothing to draw
-                const transferPath = [
+                const transferPath = walks?.transferPaths[i] ?? [
                     { lat: seg.toStopLat, lng: seg.toStopLng },
                     { lat: nextSeg.fromStopLat, lng: nextSeg.fromStopLng }
                 ];
                 return (
-                    <Polyline
+                    <PolylineF
                         key={`transfer-walk-${i}`}
                         path={transferPath}
                         options={{
@@ -304,7 +308,7 @@ export default function RouteTrackingOverlay({ tripOption }: RouteTrackingOverla
             })}
 
             {/* Walking from last stop to destination (dotted line) */}
-            <Polyline
+            <PolylineF
                 path={walkToDestPath}
                 options={{
                     strokeColor: '#5f6368',

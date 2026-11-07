@@ -53,6 +53,13 @@ router.get('/live', TransitController.getLiveBuses);
  */
 router.get('/plan/arrive-by', rateLimit('plan-arrive-by', 30), TransitController.planArriveBy);
 
+/**
+ * POST /api/walk { from: { lat, lng }, to: { lat, lng } }
+ * The walking path between two points along sidewalks, paths and streets (OpenStreetMap). A tracked trip asks
+ * for 2–4 of these, and again as the rider walks; each takes a few milliseconds.
+ */
+router.post('/walk', rateLimit('walk', 120), TransitController.getWalkRoute);
+
 /*
  route = GET /api/stop-predictions/:stopId
  Fetch real-time predicted bus arrivals for a specific stop

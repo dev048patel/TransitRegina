@@ -44,6 +44,7 @@
     "build": "vite build && tsx scripts/prerender.tsx",
     "serve": "vite preview",
     "build:transit-data": "node scripts/build-transit-data.mjs",
+    "build:walk-graph": "node scripts/build-walk-graph.mjs",
     "dev:server": "cross-env TS_NODE_PROJECT=tsconfig.server.json nodemon src/server.ts"
   },
   "eslintConfig": {

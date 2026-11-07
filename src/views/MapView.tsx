@@ -20,6 +20,7 @@ import TrackingPanel from './components/transit/TrackingPanel';
 import UserLocationMarker from './components/transit/UserLocationMarker';
 import LiveBusMarker, { ABOVE_BUSES_Z } from './components/transit/LiveBusMarker';
 import { useMarkerCharacter } from '../controllers/useMarkerCharacter';
+import { useTripWalksController } from '../controllers/useWalkPathsController';
 import { stopIconFor } from '../models/data/stopIcons';
 import { applyCharacterTheme } from '../models/data/characterThemes';
 import PlaceBubble, { destinationPinFor } from './components/transit/PlaceBubble';
@@ -56,6 +57,8 @@ export const MapView: React.FC<MapViewProps> = ({
   const [showInfoWindow, setShowInfoWindow] = useState(false);
   const [showBusSuggestions, setShowBusSuggestions] = useState(false);
   const [activeTracking, setActiveTracking] = useState<TripOption | null>(null);
+  // The tracked trip's walks along sidewalks and paths, for the map and the panel's walk times
+  const trackingWalks = useTripWalksController(activeTracking);
   const [selectedBus, setSelectedBus] = useState<BusPosition | null>(null);
   const [selectedStop, setSelectedStop] = useState<Stop | null>(null);
   const [showStopDetail, setShowStopDetail] = useState(false);
@@ -258,7 +261,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
       {/* Tracking Panel (bottom sheet) */}
       {activeTracking && (
-        <TrackingPanel tripOption={activeTracking} onStopTracking={handleStopTracking} onBack={handleBackToSuggestions} destinationName={selectedPlaceMarker?.name} />
+        <TrackingPanel tripOption={activeTracking} walks={trackingWalks} onStopTracking={handleStopTracking} onBack={handleBackToSuggestions} destinationName={selectedPlaceMarker?.name} />
       )}
 
 
@@ -276,7 +279,7 @@ export const MapView: React.FC<MapViewProps> = ({
       >
         {/* Route Tracking Overlay (when tracking is active) */}
         {activeTracking && (
-          <RouteTrackingOverlay tripOption={activeTracking} />
+          <RouteTrackingOverlay tripOption={activeTracking} walks={trackingWalks} />
         )}
 
         {/* Render Stops — viewport-culled, hidden during tracking */}

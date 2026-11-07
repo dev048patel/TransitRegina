@@ -1040,3 +1040,32 @@ test('the website enforces its Content Security Policy', async () => {
         assert.ok(headers['Content-Security-Policy'].includes(rule), rule);
     assert.ok(!/script-src[^;]*'unsafe-inline'/.test(headers['Content-Security-Policy']), 'no inline scripts allowed');
 });
+
+test('failed code requests do not use up the daily quota', async () => {
+    // Twilio down: the code never went out, so it doesn't count
+    let v = fakeVerify({ sendFails: new Error('Twilio unavailable') });
+    answer = profileWith({ mobile_number: '+1 306-555-0133', mobile_verified: false });
+    for (let i = 0; i < 6; i++) assert.equal((await api('POST', '/api/sms/verify/send', { token: T.user })).status, 503, `failed send ${i + 1}`);
+    // A number outside Canada is refused before Twilio; that doesn't count either
+    answer = profileWith({ mobile_number: '+1 876-555-0111', mobile_verified: false });
+    for (let i = 0; i < 6; i++) assert.equal((await api('POST', '/api/sms/verify/send', { token: T.user })).status, 400, `refused number ${i + 1}`);
+    // Once fixed, the rider can still get a code
+    v = fakeVerify();
+    answer = profileWith({ mobile_number: '+1 306-555-0133', mobile_verified: false });
+    assert.equal((await api('POST', '/api/sms/verify/send', { token: T.user })).status, 200);
+    assert.equal(v.sent.length, 1);
+    phoneVerify._setClient(null);
+});
+
+test('parallel code requests cannot get past the daily quota', async () => {
+    const v = fakeVerify();
+    answer = profileWith({ mobile_number: '+1 306-555-0144', mobile_verified: false });
+    // The rider has had three codes today (earlier tests), so two are left: a burst of ten from many addresses,
+    // all in flight at once, gets exactly two
+    const burst = await Promise.all(Array.from({ length: 10 }, () => api('POST', '/api/sms/verify/send', { token: T.user })));
+    const codes = burst.map(r => r.status);
+    assert.equal(codes.filter(s => s === 200).length, 2, codes.join(','));
+    assert.equal(codes.filter(s => s === 429).length, 8, codes.join(','));
+    assert.equal(v.sent.length, 2);
+    phoneVerify._setClient(null);
+});

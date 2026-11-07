@@ -43,7 +43,9 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
 
             {/* Departures */}
             <div style={contentStyle}>
-                {loading && routeGroups.length === 0 && (
+                {/* Every route serving the stop has a group even before its departures arrive, so "loading" can't
+                    wait for an empty list: until the first answer, the spinner stands in for all of them */}
+                {loading && (
                     <div style={statusStyle}><div style={spinnerStyle} /> Loading departures…</div>
                 )}
 
@@ -60,7 +62,7 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
                     <div style={statusStyle}>No departures predicted for this stop right now</div>
                 )}
 
-                {routeGroups.map((group, i) => (
+                {!loading && routeGroups.map((group, i) => (
                     <RouteRow key={group.routeId} group={group} isNearest={i === 0 && group.hasLiveData} />
                 ))}
             </div>

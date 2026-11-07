@@ -56,6 +56,8 @@ a, button {
 @media (max-width: 640px) {
     .map-card { top: 54px !important; right: 8px !important; max-width: min(300px, calc(100vw - 16px)) !important; max-height: 48dvh !important; }
     .map-card.map-card--no-nav { top: 8px !important; max-height: 48dvh !important; }
+    /* Previewing a trip on the map: a shorter card so the route below it shows */
+    .map-card.bus-suggestion-panel--preview { max-height: 30dvh !important; }  /* PREVIEW_CARD_PHONE in MapView */
 }
 
 /* Google Maps InfoWindow - prevent it from being too wide on mobile */

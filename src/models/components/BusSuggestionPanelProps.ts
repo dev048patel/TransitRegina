@@ -8,6 +8,8 @@ export interface BusSuggestionPanelProps {
     destination: { lat: number; lng: number; name: string };
     onClose: () => void;
     onSelectRoute?: (option: TripOption) => void;
+    /** A planned-for-later trip to draw on the map (walks, buses, stops), or null when none is previewed */
+    onPreviewTrip?: (trip: TripOption | null) => void;
     liveBuses?: BusPosition[];
     weather?: WeatherSnapshot | null;
     /** The user's map character — sets the panel's wording and the face on each card. */

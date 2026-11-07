@@ -20,7 +20,7 @@ function shortTime(t: string): string {
 }
 
 // Pure view component — all GPS/route logic lives in useBusSuggestionController
-export default function BusSuggestionPanel({ destination, onClose, onSelectRoute, liveBuses, weather, character = 'default' }: BusSuggestionPanelProps) {
+export default function BusSuggestionPanel({ destination, onClose, onSelectRoute, onPreviewTrip, liveBuses, weather, character = 'default' }: BusSuggestionPanelProps) {
     const voice = CHARACTER_VOICE[character];
     const { gpsLoading, gpsError, origin, results, searching, updating, lastUpdated, handleRefresh } = useBusSuggestionController({
         destination,
@@ -33,8 +33,13 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
     const planning = arriveByMode && arriveByTime !== '';
     const arriveBy = useArriveByController({ origin, destination, time: planning ? arriveByTime : '' });
 
+    // The previewed trip goes to the map; none once the panel closes
+    const previewTrip = arriveBy.previewTrip;
+    React.useEffect(() => { onPreviewTrip?.(previewTrip); }, [previewTrip, onPreviewTrip]);
+    React.useEffect(() => () => onPreviewTrip?.(null), [onPreviewTrip]);
+
     return (
-        <div className="bus-suggestion-panel map-card t-panel" style={panelStyle}>
+        <div className={`bus-suggestion-panel map-card t-panel${previewTrip ? ' bus-suggestion-panel--preview' : ''}`} style={panelStyle}>
             {/* Header */}
             <div className="t-panel-header" style={headerStyle}>
                 {/* Search results are "Place, street, city…": the place alone keeps this to one line */}
@@ -140,7 +145,10 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
                 )}
 
                 {planning && !gpsLoading && !gpsError && (
-                    <ArriveByPlanCard plan={arriveBy.plan} loading={arriveBy.loading} error={arriveBy.error} />
+                    <ArriveByPlanCard
+                        plan={arriveBy.plan} loading={arriveBy.loading} error={arriveBy.error}
+                        previewing={arriveBy.previewing} onPreview={arriveBy.preview} onEndPreview={arriveBy.endPreview}
+                    />
                 )}
 
                 {!planning && searching && !gpsLoading && (

@@ -69,7 +69,7 @@ function firstTripFrom(trips: number[][], pos: number, t: number): number {
     return lo;
 }
 
-function raptor(tt: Timetable, day: ServiceDay, access: Access, departMin: number): Rounds {
+function raptor(tt: Timetable, day: ServiceDay, access: Access, departMin: number, avoid?: ReadonlySet<string>): Rounds {
     const n = tt.stopIds.length;
     const r: Rounds = { ride: [], rideLab: [], arr: [], arrLab: [] };
     for (let k = 0; k <= MAX_LEGS; k++) {
@@ -99,7 +99,7 @@ function raptor(tt: Timetable, day: ServiceDay, access: Access, departMin: numbe
 
         for (const [p, startPos] of queue) {
             const trips = day.trips[p];
-            if (!trips.length) continue;
+            if (!trips.length || avoid?.has(tt.patterns[p].route)) continue;
             const stops = tt.patterns[p].stops;
             let cur: number[] | null = null, boardPos = -1;
             for (let pos = startPos; pos < stops.length; pos++) {
@@ -191,11 +191,11 @@ function better(a: Journey, b: Journey | null): boolean {
 }
 
 /** The latest-leaving journey that arrives by `arriveByMin` */
-function latestArrivingBy(tt: Timetable, day: ServiceDay, access: Access, egress: Access, arriveByMin: number): Journey | null {
+function latestArrivingBy(tt: Timetable, day: ServiceDay, access: Access, egress: Access, arriveByMin: number, avoid?: ReadonlySet<string>): Journey | null {
     let chosen: Journey | null = null;
     let depart = arriveByMin - WINDOW_MIN;
     for (let i = 0; i < 80 && depart <= arriveByMin; i++) {
-        const onTime = journeysByRound(tt, raptor(tt, day, access, depart), egress).filter(j => j.arriveMin <= arriveByMin);
+        const onTime = journeysByRound(tt, raptor(tt, day, access, depart, avoid), egress).filter(j => j.arriveMin <= arriveByMin);
         if (!onTime.length) break;
         for (const j of onTime) if (better(j, chosen)) chosen = j;
         // try again leaving just after the latest of these, until nothing arrives in time
@@ -219,12 +219,15 @@ function accessFrom(tt: Timetable, place: LatLng): Access {
     return near.map(s => [s.stop, s.minutes]);
 }
 
-/** The daily planner's question: how does the rider get from `origin` to `destination` by `arriveByMin`? */
-export function planArriveBy(tt: Timetable, date: string, origin: LatLng, destination: LatLng, arriveByMin: number): PlanResult {
+/**
+ * The daily planner's question: how does the rider get from `origin` to `destination` by `arriveByMin`?
+ * `avoid` leaves out buses on those routes, to find other ways of making the same trip.
+ */
+export function planArriveBy(tt: Timetable, date: string, origin: LatLng, destination: LatLng, arriveByMin: number, avoid?: ReadonlySet<string>): PlanResult {
     const day = tt.day(date);
     const access = accessFrom(tt, origin), egress = accessFrom(tt, destination);
 
-    const onTime = egress.length && access.length ? latestArrivingBy(tt, day, access, egress, arriveByMin) : null;
+    const onTime = egress.length && access.length ? latestArrivingBy(tt, day, access, egress, arriveByMin, avoid) : null;
     if (onTime) return { status: 'planned', journey: onTime };
     if (!access.length) return { status: 'no_service', earliest: null };
 

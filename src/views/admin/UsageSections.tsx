@@ -1,13 +1,13 @@
 /**
  * UsageSections.tsx — Transit Regina  [VIEW — MVC]
- * The deeper parts of the admin Usage page: who is on now, visits, speed, errors, unmet demand, the search map and
+ * The deeper parts of the admin Usage page: who is on now, visits, errors, unmet demand, the search map and
  * returning riders. Pure rendering; the data comes from useUsageController.
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Circle, GoogleMap } from '@react-google-maps/api';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import type { Metric, NowVisitor, SearchPoint, Unmet, Usage, UsageTop } from '../../controllers/admin/useUsageController';
+import type { NowVisitor, SearchPoint, Unmet, Usage, UsageTop } from '../../controllers/admin/useUsageController';
 import { downloadCsv } from '../../controllers/admin/useUsageController';
 import { USAGE_LABEL } from '../../models/data/usageLabels';
 import { MapModel } from '../../models/MapModel';
@@ -28,7 +28,7 @@ export function NowCard({ now }: { now: { setup: boolean; visitors: NowVisitor[]
     const list = now?.visitors ?? [];
     const signedIn = list.filter(v => v.userId).length;
     return (
-        <Card title="On the app now" action={<span className="text-xs text-slate-500">last 5 minutes · updates every 30 s</span>}>
+        <Card title="On the app now" about="People using the app right now (active in the last 5 minutes, with the app on screen). Click a name to see what they did." action={<span className="text-xs text-slate-500">updates every 30 s</span>}>
             {!now ? <p className="px-5 py-4 text-sm text-slate-500">Loading…</p> : !now.setup ? <p className="px-5 py-4 text-sm text-slate-500">Not set up yet.</p> : (
                 <>
                     <div className="px-5 pt-3 pb-1 text-sm text-slate-700"><b className="text-2xl text-slate-900 tabular-nums">{list.length}</b> people · {signedIn} signed in</div>
@@ -51,56 +51,20 @@ export function NowCard({ now }: { now: { setup: boolean; visitors: NowVisitor[]
 /** Visits: how many, how long, how many pages, how many left after one look */
 export function SessionTiles({ s }: { s: Usage['sessions'] }) {
     const tiles = [
-        ['Visits', n(s?.sessions), 'A visit is one use of the app, until 30 minutes without activity'],
-        ['Average visit', s?.avg_minutes !== null && s?.avg_minutes !== undefined ? `${n(s.avg_minutes, 1)} min` : '—', 'From the first to the last thing done in a visit'],
-        ['Typical visit', s?.median_minutes !== null && s?.median_minutes !== undefined ? `${n(s.median_minutes, 1)} min` : '—', 'Half of visits are shorter, half longer (median)'],
-        ['Pages per visit', n(s?.avg_pages, 1), 'Pages opened in a visit, on average'],
-        ['Left after one look', s?.bounce_rate !== null && s?.bounce_rate !== undefined ? `${n(s.bounce_rate, 1)}%` : '—', 'Visits with one page and nothing else done'],
+        ['Visits', n(s?.sessions), 'Each time someone opened the app. A visit ends after 30 minutes without activity.'],
+        ['Typical visit', s?.median_minutes !== null && s?.median_minutes !== undefined ? `${n(s.median_minutes, 1)} min` : '—', 'How long a visit usually lasts. Short is fine: checking a bus should be quick.'],
+        ['Left without doing anything', s?.bounce_rate !== null && s?.bounce_rate !== undefined ? `${n(s.bounce_rate, 1)}%` : '—', 'Visits where people opened the app and left without searching or tapping. High means the app is confusing or slow.'],
     ] as const;
     return (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {tiles.map(([label, value, hint]) => (
-                <div key={label} className="bg-white rounded-xl border border-slate-200 p-4" title={hint}>
+                <div key={label} className="bg-white rounded-xl border border-slate-200 p-4">
                     <div className="text-xs font-medium text-slate-500">{label}</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">{value}</div>
+                    <p className="text-[11px] leading-snug text-slate-500 mt-2">{hint}</p>
                 </div>
             ))}
         </div>
-    );
-}
-
-/* Google's thresholds (good / poor) for each measurement; the 75th percentile is what Google rates a site by */
-const VITALS: Record<string, { label: string; unit: 'ms' | ''; good: number; poor: number; what: string }> = {
-    LCP: { label: 'Main content shows', unit: 'ms', good: 2500, poor: 4000, what: 'Largest Contentful Paint' },
-    FCP: { label: 'First thing on screen', unit: 'ms', good: 1800, poor: 3000, what: 'First Contentful Paint' },
-    TTFB: { label: 'Server answers', unit: 'ms', good: 800, poor: 1800, what: 'Time to First Byte' },
-    FID: { label: 'Reacts to the first tap', unit: 'ms', good: 100, poor: 300, what: 'First Input Delay' },
-    INP: { label: 'Reacts to taps', unit: 'ms', good: 200, poor: 500, what: 'Interaction to Next Paint' },
-    CLS: { label: 'Page jumps around', unit: '', good: 0.1, poor: 0.25, what: 'Cumulative Layout Shift (no unit)' },
-};
-const TIMINGS: Record<string, string> = { map_load: 'Map ready to use', plan_routes: 'Working out bus options', stop_board: 'Stop board fills in', live_feed: 'First live buses appear' };
-const shown = (v: number, unit: 'ms' | '') => unit === 'ms' ? (v >= 1000 ? `${(v / 1000).toFixed(1)} s` : `${Math.round(v)} ms`) : v.toFixed(2);
-function Rating({ v, good, poor }: { v: number; good: number; poor: number }) {
-    const [text, cls] = v <= good ? ['Good', 'text-emerald-700 bg-emerald-50 border-emerald-200'] : v <= poor ? ['Needs work', 'text-amber-800 bg-amber-50 border-amber-200'] : ['Poor', 'text-red-700 bg-red-50 border-red-200'];
-    return <span className={'whitespace-nowrap text-[11px] font-semibold border rounded-full px-2 py-0.5 ' + cls}>{text}</span>;
-}
-
-/** How fast the app is for riders, on their own devices */
-export function SpeedCard({ vitals, timings }: { vitals: Metric[]; timings: Metric[] }) {
-    return (
-        <Card title="Speed for riders" action={<span className="text-xs text-slate-500">on riders' own devices</span>}>
-            <div className="overflow-x-auto"><table className="w-full text-sm [&_td:not(:first-child)]:whitespace-nowrap [&_th]:whitespace-nowrap">
-                <thead><tr className="text-left text-xs text-slate-500"><th className="px-3 sm:px-5 py-2 font-medium">Measurement</th><th className="px-1.5 sm:px-3 py-2 font-medium text-right" title="Half of riders get this or better">Typical</th><th className="px-1.5 sm:px-3 py-2 font-medium text-right" title="One rider in four gets this or worse; Google rates sites by this">Slow, 1 in 4</th><th className="px-3 sm:px-5 py-2 font-medium text-right">Rating</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">
-                    {vitals.filter(m => VITALS[m.name]).map(m => {
-                        const v = VITALS[m.name];
-                        return <tr key={m.name} title={`${v.what}: ${m.samples} measurements`}><td className="px-3 sm:px-5 py-2 text-slate-900">{v.label} <span className="text-xs text-slate-400">{m.name}</span></td><td className="px-1.5 sm:px-3 py-2 text-right tabular-nums">{shown(m.p50, v.unit)}</td><td className="px-1.5 sm:px-3 py-2 text-right tabular-nums">{shown(m.p75, v.unit)}</td><td className="px-3 sm:px-5 py-2 text-right"><Rating v={m.p75} good={v.good} poor={v.poor} /></td></tr>;
-                    })}
-                    {timings.map(m => <tr key={m.name} title={`${m.samples} measurements; the slowest tenth took ${shown(m.p90, 'ms')}`}><td className="px-3 sm:px-5 py-2 text-slate-900">{TIMINGS[m.name] ?? m.name}</td><td className="px-1.5 sm:px-3 py-2 text-right tabular-nums">{shown(m.p50, 'ms')}</td><td className="px-1.5 sm:px-3 py-2 text-right tabular-nums">{shown(m.p75, 'ms')}</td><td className="px-3 sm:px-5 py-2 text-right text-xs text-slate-400">ours</td></tr>)}
-                    {vitals.length + timings.length === 0 && <tr><td colSpan={4} className="px-5 py-6 text-slate-500">No measurements yet.</td></tr>}
-                </tbody>
-            </table></div>
-        </Card>
     );
 }
 
@@ -108,7 +72,7 @@ export function SpeedCard({ vitals, timings }: { vitals: Metric[]; timings: Metr
 export function ErrorsCard({ errors, places, api }: { errors: UsageTop[]; places: UsageTop[]; api: UsageTop[] }) {
     const total = errors.reduce((s, e) => s + e.events, 0) + api.reduce((s, e) => s + e.events, 0);
     return (
-        <Card title="Errors on riders' devices" action={<CsvButton name="errors" rows={[...errors.map(e => ({ type: 'crash', ...e })), ...api.map(e => ({ type: 'request', ...e }))]} />}>
+        <Card title="Errors on riders' devices" about="Things that broke in the app on people's phones and computers. Anything here is a bug to fix." action={<CsvButton name="errors" rows={[...errors.map(e => ({ type: 'crash', ...e })), ...api.map(e => ({ type: 'request', ...e }))]} />}>
             {total === 0 ? <p className="px-5 py-6 text-sm text-emerald-800">No errors recorded in this period.</p> : (
                 <table className="w-full text-sm">
                     <thead><tr className="text-left text-xs text-slate-500"><th className="px-5 py-2 font-medium">What went wrong</th><th className="px-3 py-2 font-medium text-right">Times</th><th className="px-5 py-2 font-medium text-right">Riders</th></tr></thead>
@@ -126,7 +90,7 @@ export function ErrorsCard({ errors, places, api }: { errors: UsageTop[]; places
 /** Where buses serve riders badly: places riders looked for buses to, worst first */
 export function UnmetCard({ rows }: { rows: Unmet[] }) {
     return (
-        <Card title="Where riders found no good bus" action={<CsvButton name="unmet-demand" rows={rows as unknown as Record<string, unknown>[]} />}>
+        <Card title="Where riders found no good bus" about="Places people looked up buses to, worst served first: no bus at all, then over an hour, then places people looked at but didn't go. Shows where bus service is missing." action={<CsvButton name="unmet-demand" rows={rows as unknown as Record<string, unknown>[]} />}>
             {rows.length === 0 ? <p className="px-5 py-6 text-sm text-slate-500">Nothing yet.</p> : (
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm whitespace-nowrap">
@@ -150,7 +114,6 @@ export function UnmetCard({ rows }: { rows: Unmet[] }) {
                     </table>
                 </div>
             )}
-            <p className="px-5 py-2 text-xs text-slate-500 border-t border-slate-100">Worst served first: no bus at all, then trips over an hour, then places riders looked at but didn't go. The data a transit agency plans routes from.</p>
         </Card>
     );
 }
@@ -160,7 +123,7 @@ export function SearchMap({ points, ready }: { points: SearchPoint[]; ready: boo
     const [hover, setHover] = useState<SearchPoint | null>(null);
     const max = Math.max(1, ...points.map(p => p.events));
     return (
-        <Card title="Where riders search" action={<span className="text-xs text-slate-500">{points.length} places · hover a circle</span>}>
+        <Card title="Where riders search" about="Where the places people searched for are. Bigger circles mean more searches. Hover a circle for the place." action={<span className="text-xs text-slate-500">{points.length} places</span>}>
             <div className="relative h-80">
                 {!ready ? <p className="p-5 text-sm text-slate-500">Loading the map…</p> : (
                     <GoogleMap mapContainerStyle={{ width: '100%', height: '100%' }} center={MapModel.center} zoom={11}
@@ -182,7 +145,7 @@ export function SearchMap({ points, ready }: { points: SearchPoint[]; ready: boo
 export function RetentionCard({ rows }: { rows: Usage['retention'] }) {
     const data = rows.map(r => ({ week: new Date(r.week + 'T12:00:00Z').toLocaleDateString('en-CA', { month: 'short', day: 'numeric', timeZone: 'UTC' }), Returning: r.returning_riders, New: r.new_riders, Other: Math.max(0, r.riders - r.returning_riders - r.new_riders) }));
     return (
-        <Card title="Returning riders (signed in, by week)">
+        <Card title="Returning riders" about="Signed-in riders each week. Blue came back from the week before, orange are new. Riders who keep coming back are the best sign the app is useful.">
             <div className="h-64 p-4">
                 {data.length === 0 ? <p className="text-sm text-slate-500">Nothing yet.</p> : (
                     <ResponsiveContainer width="100%" height="100%">
@@ -199,7 +162,6 @@ export function RetentionCard({ rows }: { rows: Usage['retention'] }) {
                     </ResponsiveContainer>
                 )}
             </div>
-            <p className="px-5 pb-3 text-xs text-slate-500">Returning: also used the app the week before. New: their first week. The strongest sign the app is useful is riders who come back.</p>
         </Card>
     );
 }

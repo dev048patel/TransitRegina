@@ -1253,6 +1253,26 @@ test('the admin home trend is counted in the database, not read row by row', asy
     assert.equal(r.json.usageReady, true);
 });
 
+test('"On the app now" includes riders who only have the app open, from the 60-second heartbeat', async () => {
+    const ip = freshIp(), older = new Date(Date.now() - 3 * 60_000).toISOString();
+    await api('POST', '/api/analytics/heartbeat', { ip, headers: { 'User-Agent': PHONE_UA }, body: { page: '/map' } });   // signed out, just watching buses
+    await api('POST', '/api/analytics/heartbeat', { token: T.user, headers: { 'User-Agent': PHONE_UA }, body: { page: '/map' } });
+    await api('POST', '/api/analytics/heartbeat', { headers: { 'User-Agent': 'Googlebot/2.1' }, body: { page: '/map' } });
+    answer = (method, url) => url.startsWith('/rest/v1/rpc/usage_now')
+        ? [{ visitor: `u:${USER}`, user_id: USER, last_at: older, last_kind: 'place_searched', last_page: '/map', device: 'Mobile', events: 4 }] : undefined;
+    const r = await api('GET', '/api/admin/usage/now', { token: T.admin });
+    assert.equal(r.status, 200);
+    const { visitorId } = await import('../src/models/services/UsageEvents');
+    const anon = r.json.visitors.find((v: any) => v.visitor === visitorId(ip, PHONE_UA, null).slice(2));
+    assert.ok(anon, 'the signed-out rider is listed though they did nothing but keep the map open');
+    assert.deepEqual([anon.kind, anon.page, anon.device, anon.userId], ['still_here', '/map', 'Mobile', null]);
+    const rider = r.json.visitors.filter((v: any) => v.userId === USER);
+    assert.equal(rider.length, 1, 'one line per rider, not one for the action and one for the heartbeat');
+    assert.equal(rider[0].kind, 'still_here', 'the heartbeat is newer than their last action');
+    assert.ok(Date.parse(rider[0].at) > Date.parse(older));
+    assert.ok(!r.json.visitors.some((v: any) => v.device === 'Desktop' && v.kind === 'still_here' && v.visitor?.startsWith?.('a:')), 'crawlers are not people');
+});
+
 /* ── deeper admin insights (script 012): view-only admins, reports, notes, texts, speed and errors ── */
 
 test('a view-only admin can look at every admin page but change nothing', async () => {
@@ -1387,6 +1407,7 @@ test('a custom date range is whole Regina days, up to a year', async () => {
 });
 
 test('who is on now and the search map come from the database, and check their input', async () => {
+    (await import('../src/models/services/UsageEvents')).forgetPresence();   // earlier tests' heartbeats; this one is about the database rows
     answer = (method, url) => url.startsWith('/rest/v1/rpc/usage_now') ? [{ visitor: `u:${USER}`, user_id: USER, last_at: '2026-11-08T15:00:00Z', last_kind: 'stop_opened', last_page: '/map', device: 'Mobile', events: '4' }, { visitor: 'a:abcdefghijklmnopqrstuv', user_id: null, last_at: '2026-11-08T15:01:00Z', last_kind: 'page_view', last_page: '/', device: 'Desktop', events: 1 }]
         : url.startsWith('/rest/v1/rpc/usage_points') ? [{ lat: '50.449', lng: '-104.611', events: '12', label: 'Cornwall Centre' }] : undefined;
     const now = await api('GET', '/api/admin/usage/now', { token: T.admin });

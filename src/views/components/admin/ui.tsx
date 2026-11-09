@@ -15,7 +15,8 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
     );
 }
 
-export function Card({ title, action, children, className = '' }: { title?: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
+/** `about`: one or two plain sentences under the title, saying what the card shows and what it means */
+export function Card({ title, about, action, children, className = '' }: { title?: string; about?: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
     return (
         <section className={'bg-white rounded-xl border border-slate-200 ' + className}>
             {title && (
@@ -24,6 +25,7 @@ export function Card({ title, action, children, className = '' }: { title?: stri
                     {action}
                 </div>
             )}
+            {about && <p className="px-5 pt-3 text-xs leading-relaxed text-slate-500">{about}</p>}
             {children}
         </section>
     );

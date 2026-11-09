@@ -152,3 +152,23 @@ export function summarizeEvents(events: VisitorEvent[], tops: [string, string, s
             .slice(0, 8).map(([value, n]) => ({ value, events: n, visitors: 1 }))])),
     };
 }
+
+/* Who has the app open right now: the latest page load or 60-second heartbeat from each visitor (a visible tab only).
+   Kept in memory, not in usage_events, so a minute-by-minute signal doesn't swamp the counts. After a restart
+   the list fills again within a minute.
+   ponytail: one server process; move this to a table if the API ever runs on more than one instance. */
+export interface Presence { visitor: string; userId: string | null; at: number; page: string | null; device: string }
+const presence = new Map<string, Presence>();
+const PRESENCE_KEEP_MS = 10 * 60_000;
+
+export function markPresent(visitor: string, userId: string | null, page: string | null, device: string, now = Date.now()): void {
+    presence.set(visitor, { visitor, userId, at: now, page, device });
+    for (const [k, p] of presence) if (now - p.at > PRESENCE_KEEP_MS) presence.delete(k);
+}
+
+/** Everyone whose app said "still here" within the last `ms` */
+export function presentWithin(ms: number, now = Date.now()): Presence[] {
+    return [...presence.values()].filter(p => now - p.at <= ms);
+}
+/** Tests: start from nobody on the app */
+export const forgetPresence = (): void => presence.clear();

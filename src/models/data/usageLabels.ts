@@ -3,6 +3,7 @@
 
 export const USAGE_LABEL: Record<string, string> = {
     page_view: 'Opened a page',
+    still_here: 'Has the app open',
     location: 'Answered the location question',
     place_searched: 'Searched for a place',
     place_tapped: 'Picked a place on the map',

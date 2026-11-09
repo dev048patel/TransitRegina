@@ -9,7 +9,7 @@ import { requireAuth, verifyRequest } from '../middleware/requireAuth';
 import { serviceDb } from '../../models/lib/serverDb';
 import { requireStaff } from '../middleware/requireAdmin';
 import { clientIp, rateLimit, isDateOnly, reject } from '../middleware/security';
-import { cleanEvent, cleanPage, cleanSession, deviceOf, isBot, saveEvents, visitorId, type UsageRow } from '../../models/services/UsageEvents';
+import { cleanEvent, cleanPage, cleanSession, deviceOf, isBot, markPresent, saveEvents, visitorId, type UsageRow } from '../../models/services/UsageEvents';
 
 const router = Router();
 
@@ -19,6 +19,12 @@ const trackLimit = rateLimit('analytics', 120);
 async function signedInUserId(req: Request): Promise<string | undefined> {
     const user = await verifyRequest(req);
     return user && user !== 'unavailable' ? user.id : undefined;
+}
+
+/** This visitor has the app open now (the admin "On the app now" list), under the same id as their usage events */
+function present(req: Request, page: string | null, userId: string | undefined): void {
+    const ua = String(req.headers['user-agent'] || '').slice(0, 300);
+    if (!isBot(ua)) markPresent(visitorId(clientIp(req), ua, userId), userId ?? null, page, deviceOf(ua));
 }
 
 /**
@@ -31,6 +37,7 @@ router.post('/beacon', trackLimit, async (req: Request, res: Response) => {
         const userAgent = (req.headers['user-agent'] || 'Unknown').slice(0, 300);
         const page = cleanPage(req.body?.page) ?? '/';
         const userId = await signedInUserId(req);
+        present(req, page, userId);
 
         const sessionId = await registerSession(ip, userAgent, page, userId);
         res.json({ ok: true, sessionId });
@@ -50,6 +57,7 @@ router.post('/heartbeat', trackLimit, async (req: Request, res: Response) => {
         const userAgent = (req.headers['user-agent'] || 'Unknown').slice(0, 300);
         const page = cleanPage(req.body?.page) ?? undefined;
         const userId = await signedInUserId(req);
+        present(req, page ?? null, userId);
 
         await heartbeat(ip, userAgent, page, userId);
         res.json({ ok: true });

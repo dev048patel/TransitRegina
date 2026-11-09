@@ -13,7 +13,7 @@ import { HealthService } from '../../models/services/HealthService';
 import { RealTimeService } from '../../models/services/RealTimeService';
 import { SmsOutageService } from '../../models/services/SmsOutageService';
 import { reginaDateKey, startOfReginaDay } from '../../models/services/ReginaTime';
-import { summarizeEvents, type VisitorEvent } from '../../models/services/UsageEvents';
+import { presentWithin, summarizeEvents, type VisitorEvent } from '../../models/services/UsageEvents';
 
 const router = Router();
 // Everyone on the admin panel (admins and view-only admins) may look; anything that changes something also needs requireAdmin
@@ -206,7 +206,14 @@ router.get('/usage/now', async (_req: Request, res: Response) => {
     if (notSetUp(error)) { res.json({ setup: false, visitors: [] }); return; }
     if (error) { console.error('[Admin] Now error:', error.message); res.status(500).json({ error: 'Could not load who is on now' }); return; }
     const rows = (data ?? []) as { visitor: string; user_id: string | null; last_at: string; last_kind: string; last_page: string | null; device: string | null; events: number }[];
-    const people = await withPeople(rows.map(x => ({ ...x, message: '' })));
+    // Add riders who only have the app open (60-second "still here" signal): newer than their last action, it shows where they are now
+    const byVisitor = new Map(rows.map(r => [r.visitor, r]));
+    for (const p of presentWithin(5 * 60_000)) {
+        const row = byVisitor.get(p.visitor), at = new Date(p.at).toISOString();
+        if (!row) byVisitor.set(p.visitor, { visitor: p.visitor, user_id: p.userId, last_at: at, last_kind: 'still_here', last_page: p.page, device: p.device, events: 0 });
+        else if (p.at > Date.parse(row.last_at)) Object.assign(row, { last_at: at, last_kind: 'still_here', last_page: p.page ?? row.last_page });
+    }
+    const people = await withPeople([...byVisitor.values()].map(x => ({ ...x, message: '' })));
     res.json({ setup: true, visitors: people.map(x => ({ who: x.user_id ? (x.who ?? 'A deleted account') : `Visitor ${x.visitor.slice(2, 8)}`, userId: x.user_id, visitor: x.visitor.startsWith('a:') ? x.visitor.slice(2) : null, at: x.last_at, kind: x.last_kind, page: x.last_page, device: x.device, events: Number(x.events) }))
         .sort((a, b) => b.at.localeCompare(a.at)) });
 });

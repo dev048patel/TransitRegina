@@ -8,6 +8,7 @@ import { WeeklyScheduleService } from '../models/services/WeeklyScheduleService'
 import { PushSubscriptionService } from '../models/services/PushSubscriptionService';
 import { DayPlan, WEEKDAY_INDICES, blankDay } from '../models/transit/WeeklySchedule';
 import { computeDepartBy } from '../models/transit/TripSchedule';
+import { track } from '../models/services/UsageTracker';
 
 const routePlanner = new RoutePlanningService();
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
@@ -182,6 +183,7 @@ export function useWeeklyPlannerController() {
                 });
             });
             await WeeklyScheduleService.saveAll(user.id, payload);
+            track('weekly_saved', { days: WEEKDAY_INDICES.filter(d => days[d].enabled).length });
             setSaveSuccess(true);
             setTimeout(() => setSaveSuccess(false), 3000);
         } catch {

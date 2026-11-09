@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, Bus, BarChart3, ShieldAlert, ScrollText, ArrowLeft, Menu, ShieldCheck, X } from 'lucide-react';
+import { Home, Users, Bus, BarChart3, ShieldAlert, ScrollText, ArrowLeft, Menu, ShieldCheck, X, Flag, Eye } from 'lucide-react';
 import { useAuth } from '../../models/context/AuthContext';
 import { supabase } from '../../models/lib/supabase';
 import { twoStepTimeOf } from '../../models/auth/AuthModel';
@@ -13,8 +13,9 @@ import { twoStepTimeOf } from '../../models/auth/AuthModel';
 const NAV = [
     { to: '/admin', label: 'Home', icon: Home, end: true },
     { to: '/admin/people', label: 'People', icon: Users },
-    { to: '/admin/service', label: 'Service', icon: Bus },
+    { to: '/admin/service', label: 'Service', icon: Bus, adminOnly: true },   // only for changing routes: hidden from view-only admins
     { to: '/admin/insights', label: 'Insights', icon: BarChart3 },
+    { to: '/admin/reports', label: 'Reports', icon: Flag },
     { to: '/admin/security', label: 'Security', icon: ShieldAlert },
     { to: '/admin/activity', label: 'Activity log', icon: ScrollText },
 ];
@@ -22,7 +23,7 @@ const IDLE_MINUTES = 30;
 const LAST_ACTIVE_KEY = 'admin-last-active';
 
 export default function AdminLayout() {
-    const { user, logout } = useAuth();
+    const { user, logout, isAdmin } = useAuth();
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const [menuOpen, setMenuOpen] = useState(false);
@@ -60,7 +61,7 @@ export default function AdminLayout() {
 
     const nav = (
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto" aria-label="Admin sections">
-            {NAV.map(({ to, label, icon: Icon, end }) => (
+            {NAV.filter(n => isAdmin || !('adminOnly' in n)).map(({ to, label, icon: Icon, end }) => (
                 <NavLink key={to} to={to} end={end}
                     className={({ isActive }) => 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ' +
                         (isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white')}>
@@ -89,6 +90,7 @@ export default function AdminLayout() {
                 <header className="h-14 bg-white border-b border-slate-200 px-4 lg:px-6 flex items-center justify-between gap-3">
                     <button className="lg:hidden text-slate-600" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={22} /></button>
                     <div className="flex-1" />
+                    {!isAdmin && <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200 rounded-full px-2 py-1" title="You can see everything but change nothing"><Eye size={14} /> View only</span>}
                     <span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-1"><ShieldCheck size={14} /> Two-step verified</span>
                     <div className="text-right leading-tight">
                         <div className="text-sm font-semibold text-slate-900">{user?.fullName}</div>

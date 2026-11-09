@@ -15,7 +15,9 @@ export function useAnalyticsBeacon() {
         if (user?.id) updateLastActive(user.id);
 
         // Heartbeat keeps the session alive on the backend
+        // Only while the tab is visible: a tab left open in the background is not someone using the app
         const interval = setInterval(() => {
+            if (document.visibilityState !== 'visible') return;
             sendHeartbeat(window.location.pathname, user?.id);
             if (user?.id) updateLastActive(user.id);
         }, HEARTBEAT_INTERVAL);

@@ -26,6 +26,7 @@ import './App.css';
 import React, { Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAnalyticsBeacon } from './controllers/hooks/useAnalyticsBeacon';
+import { usePageViews } from './controllers/hooks/useUsageTracking';
 import { AuthProvider, useAuth } from './models/context/AuthContext';
 import { FeatureAccessProvider } from './models/context/FeatureAccessContext';
 import ProtectedRoute from './views/components/ProtectedRoute';
@@ -51,8 +52,10 @@ const AdminLayout = React.lazy(() => import('./views/layouts/AdminLayout'));
 const AdminHome = React.lazy(() => import('./views/admin/AdminHome'));
 const People = React.lazy(() => import('./views/admin/People'));
 const PersonPage = React.lazy(() => import('./views/admin/PersonPage'));
+const VisitorPage = React.lazy(() => import('./views/admin/VisitorPage'));
 const Insights = React.lazy(() => import('./views/admin/Insights'));
 const ActivityLog = React.lazy(() => import('./views/admin/ActivityLog'));
+const Reports = React.lazy(() => import('./views/admin/Reports'));
 const RouteManager = React.lazy(() => import('./views/admin/RouteManager'));
 const FeatureAccessControl = React.lazy(() => import('./views/admin/FeatureAccessControl'));
 const SecurityCenter = React.lazy(() => import('./views/admin/SecurityCenter'));
@@ -76,6 +79,8 @@ function AppRoutes() {
     useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
     /* Title, description and canonical address for every page that does not set its own */
     usePageMeta(metaForPath(pathname));
+    /* Every page the rider opens inside the app, for the admin Usage page */
+    usePageViews();
 
     const { isLoading } = useAuth();
     useAnalyticsBeacon();
@@ -177,8 +182,10 @@ function AppRoutes() {
                     <Route path="people/:id" element={<PersonPage />} />
                     <Route path="service" element={<RouteManager />} />
                     <Route path="insights" element={<Insights />} />
+                    <Route path="insights/visitors/:id" element={<VisitorPage />} />
                     <Route path="security" element={<SecurityCenter />} />
                     <Route path="activity" element={<ActivityLog />} />
+                    <Route path="reports" element={<Reports />} />
                     {/* Old addresses still work */}
                     <Route path="users" element={<Navigate to="/admin/people" replace />} />
                     <Route path="fac" element={<Navigate to="/admin/people/features" replace />} />

@@ -18,6 +18,8 @@ export interface SecurityEvent {
     message: string;
     ip?: string;
     userId?: string;
+    /** The account an admin action was about (script 012's target_user column) */
+    targetUser?: string;
     path?: string;
     at: string;
 }
@@ -82,9 +84,13 @@ export const SecurityEventService = {
             if (e.severity !== 'info') console.warn(`[Security] ${e.severity} ${e.type}: ${e.message}`);
 
             if (hasServiceKey()) {
-                serviceDb().from('security_events')
-                    .insert({ type: e.type, severity: e.severity, message: e.message, ip: e.ip ?? null, user_id: e.userId ?? null, path: e.path ?? null })
-                    .then(({ error }) => { if (error) console.error('[Security] Could not store event:', error.message); });
+                const row = { type: e.type, severity: e.severity, message: e.message, ip: e.ip ?? null, user_id: e.userId ?? null, path: e.path ?? null };
+                serviceDb().from('security_events').insert(e.targetUser ? { ...row, target_user: e.targetUser } : row)
+                    .then(({ error }) => {
+                        // Before script 012 there is no target_user column: store the event without it rather than lose it
+                        if (error && e.targetUser) return serviceDb().from('security_events').insert(row).then(({ error: again }) => { if (again) console.error('[Security] Could not store event:', again.message); });
+                        if (error) console.error('[Security] Could not store event:', error.message);
+                    });
             }
         }
 
@@ -100,6 +106,12 @@ export const SecurityEventService = {
                     message: `${b.count} "${e.type}" events from one address in under 10 minutes` });
             }
         }
+    },
+
+    /** Emails the admins (ALERT_EMAILS) directly: usage alerts and the weekly summary */
+    async email(subject: string, text: string): Promise<void> {
+        try { await mailer(subject.slice(0, 140), text); }
+        catch (err) { console.error('[Security] Email error:', (err as Error).message); }
     },
 
     /** Newest first. Used when the table is unavailable, and by tests. */

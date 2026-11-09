@@ -1,15 +1,15 @@
 /**
  * Insights.tsx — Transit Regina  [VIEW — MVC]
- * Usage over time: what riders do in the app, and who is visiting.
+ * Usage over time: what riders do in the app, and text messages.
  */
-import Dashboard from './Dashboard';
-import VisitorAnalytics from './VisitorAnalytics';
+import Usage from './Usage';
+import SmsStats from './SmsStats';
 
 export default function Insights() {
     return (
         <div className="space-y-8">
-            <Dashboard />
-            <VisitorAnalytics />
+            <Usage />
+            <SmsStats />
         </div>
     );
 }

@@ -9,6 +9,7 @@ import { requireAdmin } from '../middleware/requireAdmin';
 import { TwilioService } from '../../models/services/TwilioService';
 import { smsRevokedIds } from '../../models/services/SmsAccessService';
 import { PhoneVerificationService, VerifyError, CheckResult } from '../../models/services/PhoneVerificationService';
+import { recordServerEvent } from '../../models/services/UsageEvents';
 
 const router = Router();
 
@@ -69,6 +70,7 @@ router.post('/opt-in', requireAuth, async (req: Request, res: Response) => {
         .eq('id', userId);
 
     if (error) { res.status(500).json({ error: 'Could not save the change' }); return; }
+    recordServerEvent(userId, 'sms_opt_in');
     res.json({ ok: true });
 });
 
@@ -80,6 +82,7 @@ router.post('/opt-out', requireAuth, async (req: Request, res: Response) => {
         .eq('id', req.user!.id);
 
     if (error) { res.status(500).json({ error: 'Could not save the change' }); return; }
+    recordServerEvent(req.user!.id, 'sms_opt_out');
     res.json({ ok: true });
 });
 
@@ -125,6 +128,7 @@ router.post('/verify/send', requireAuth, rateLimit('sms-verify-send', 5), rateLi
     if (p.verified) { res.status(400).json({ error: 'This number is already verified' }); return; }
     try { await PhoneVerificationService.send(p.phone); }
     catch (err) { const e = err instanceof VerifyError ? err : new VerifyError('The code could not be sent. Try again in a few minutes.', 503); res.status(e.status).json({ error: e.message }); return; }
+    recordServerEvent(req.user!.id, 'phone_code_sent');
     res.json({ ok: true });
 });
 
@@ -155,6 +159,7 @@ router.post('/verify/check', requireAuth, rateLimit('sms-verify-check', 10), rat
         .eq('id', req.user!.id).eq('mobile_number', p.saved).select('id');
     if (error) { console.error('[SMS] Could not mark number verified:', error.message); res.status(500).json({ error: 'Could not save the change' }); return; }
     if (!data?.length) { res.status(409).json({ error: 'Your number changed while you were verifying it. Send a new code.' }); return; }
+    recordServerEvent(req.user!.id, 'phone_verified');
     res.json({ ok: true, phone: p.phone });
 });
 
@@ -248,6 +253,7 @@ router.post('/trip', requireAuth, requireAdmin, rateLimit('sms-trip', 10), async
     if (!r) { res.status(503).json({ error: 'The text alert service is not answering. Try again in a few minutes.' }); return; }
     if (r.status !== 200) { res.status(r.status >= 500 ? 503 : r.status).json({ error: r.json.error ?? 'The trip could not be texted' }); return; }
     const { texts, leaveAt, arriveAt, textsLeft } = r.json;
+    recordServerEvent(userId, 'trip_texts_on', { routes: list.map(l => l.route).join('>'), texts: Number(texts) || 0 });
     res.json({ ok: true, texts, leaveAt, arriveAt, textsLeft });
 });
 

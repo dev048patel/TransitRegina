@@ -14,6 +14,7 @@
 import { supabase } from '../lib/supabase';
 import { apiDelete, apiPost } from '../lib/apiClient';
 import { SITE } from '../data/legal';
+import { track } from './UsageTracker';
 import type {
     LoginFormData,
     SignupFormData,
@@ -152,6 +153,7 @@ export async function signUpUser(data: SignupFormData): Promise<SignupResult> {
         return { success: false, error: 'An account with this email already exists. Please log in instead.' };
     }
 
+    track('signed_up');
     return { success: true };
 }
 

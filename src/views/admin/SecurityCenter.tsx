@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from 'lucide-react';
 import { useSecurityController } from '../../controllers/admin/useSecurityController';
 import { Badge, Card, EVENT_LABEL, PageHeader, Stat, btn, when } from '../components/admin/ui';
 import SmsStatusCard from './SmsStatusCard';
+import { useAuth } from '../../models/context/AuthContext';
 
 /** What each kind of event usually means, so an admin can tell noise from a problem. */
 const ADVICE: Record<string, string> = {
@@ -25,6 +26,7 @@ const ADVICE: Record<string, string> = {
 const TONE = { critical: 'bad', warning: 'warn', info: 'neutral' } as const;
 
 export default function SecurityCenter() {
+    const { isAdmin } = useAuth();   // view-only admins can look but not mark events handled
     const { data, error, groups, filter, setFilter, reload, counts, showHandled, setShowHandled, markHandled } = useSecurityController();
     const open = groups.filter(g => !g.handledAt).flatMap(g => g.ids);
 
@@ -66,9 +68,9 @@ export default function SecurityCenter() {
                         <label className="flex items-center gap-1.5 text-xs text-slate-600">
                             <input type="checkbox" checked={showHandled} onChange={e => setShowHandled(e.target.checked)} /> Show handled
                         </label>
-                        <button onClick={() => markHandled(open)} disabled={!open.length} className="px-3 py-1 rounded-full text-xs font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+                        {isAdmin && <button onClick={() => markHandled(open)} disabled={!open.length} className="px-3 py-1 rounded-full text-xs font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40">
                             Mark all shown as handled
-                        </button>
+                        </button>}
                     </>}
                     {(['warning', 'critical', 'all'] as const).map(f => (
                         <button key={f} onClick={() => setFilter(f)} aria-pressed={filter === f}
@@ -105,7 +107,7 @@ export default function SecurityCenter() {
                                     </td>
                                     <td className="px-5 py-3 align-top text-right whitespace-nowrap text-xs">
                                         {g.handledAt ? <span className="text-slate-500">Handled {when(g.handledAt)}</span>
-                                            : data?.canHandle && g.ids.length && g.severity !== 'info' ? <button onClick={() => markHandled(g.ids)} className="font-semibold text-[#003DA5] hover:underline">Mark handled</button> : null}
+                                            : isAdmin && data?.canHandle && g.ids.length && g.severity !== 'info' ? <button onClick={() => markHandled(g.ids)} className="font-semibold text-[#003DA5] hover:underline">Mark handled</button> : null}
                                     </td>
                                 </tr>
                             ))}

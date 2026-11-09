@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { StopPrediction } from '../models/transit/StopPrediction';
 import { getRoutesForStop } from '../models/services/StopToRouteIndex';
 import transitColors from '../models/data/transitColors';
+import { trackApiError, trackTiming } from '../models/services/UsageTracker';
 
 const REFRESH_INTERVAL_MS = 30_000;
 
@@ -96,17 +97,22 @@ export function useStopDetailController(stopId: string) {
     // All routes serving this stop
     const allRoutes = useMemo(() => Array.from(getRoutesForStop(stopId)), [stopId]);
 
+    const timedFor = useRef('');
     const fetchPredictions = useCallback(async () => {
+        const started = performance.now();
         try {
             setError(null);
             const baseUrl = (import.meta as any).env?.VITE_SERVER_URL || '';
 
             // Single call — backend uses routes=all&lim=100 to get full day schedule
             const res = await fetch(`${baseUrl}/api/stop-predictions/${stopId}`);
+            if (res.status >= 500) trackApiError('/api/stop-predictions/:n', res.status);
             if (!res.ok) throw new Error('Failed to fetch predictions');
             const preds: StopPrediction[] = await res.json();
             setPredictions(deduplicatePredictions(preds));
             setLastRefreshed(new Date());
+            // How long a stop board takes to fill, once per stop (not every 30-second refresh)
+            if (timedFor.current !== stopId) { timedFor.current = stopId; trackTiming('stop_board', started); }
         } catch (err) {
             setError('Could not load predictions. Tap refresh to try again.');
             console.error('Stop prediction fetch error:', err);

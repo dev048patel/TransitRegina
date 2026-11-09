@@ -8,9 +8,11 @@ import { apiGet } from '../../models/lib/apiClient';
 export interface Overview {
     at: string;
     live: { activeNow: number; signedInNow: number; buses: number | null };
-    today: { visitors: number; places: number; directions: number; signups: number };
+    today: { visitors: number; searches: number; trips: number; signups: number };
     totals: { users: number; signupsWeek: number };
-    trend: { day: string; places: number; directions: number; visitors: number }[];
+    trend: { day: string; visitors: number; searches: number; trips: number }[];
+    /** false until docs/security/011_usage_analytics.sql has been run */
+    usageReady: boolean;
     attention: { level: 'critical' | 'warning'; text: string; link: string }[];
     recent: { type: string; severity: string; message: string; admin: string; created_at: string }[];
 }

@@ -10,7 +10,7 @@ import { twoStepTimeOf } from '../../models/auth/AuthModel';
 declare global {
     namespace Express {
         interface Request {
-            user?: { id: string; email?: string; role: 'user' | 'admin'; token: string; twoStep: boolean; twoStepAt: number; termsAccepted: boolean };
+            user?: { id: string; email?: string; role: 'user' | 'admin' | 'viewer'; token: string; twoStep: boolean; twoStepAt: number; termsAccepted: boolean };
         }
     }
 }
@@ -40,7 +40,7 @@ export async function verifyRequest(req: Request): Promise<Express.Request['user
     if (profile === 'unavailable') return 'unavailable';
     if (profile?.account_status === 'suspended' || profile?.account_status === 'deleted') return null;
     const twoStep = twoStepInfo(token);
-    return { id: data.user.id, email: data.user.email, role: profile?.role === 'admin' ? 'admin' : 'user', token, twoStep: twoStep.passed, twoStepAt: twoStep.at,
+    return { id: data.user.id, email: data.user.email, role: profile?.role === 'admin' || profile?.role === 'viewer' ? profile.role : 'user', token, twoStep: twoStep.passed, twoStepAt: twoStep.at,
         termsAccepted: profile ? profile.termsAccepted : false };
 }
 

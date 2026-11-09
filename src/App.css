@@ -67,9 +67,11 @@ a, button {
     }
     .gm-style-iw-d {
         max-width: 250px !important;
-        overflow: auto !important;
     }
 }
+/* Google's bubble scrolls its content, and the scrollbar tracks show as white bands on the right and bottom.
+   The bus card is a fixed small size, so it never needs to scroll. */
+.gm-style .gm-style-iw-d { overflow: hidden !important; }
 
 .Logo {
     position: absolute;

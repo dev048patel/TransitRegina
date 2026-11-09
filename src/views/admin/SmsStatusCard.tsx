@@ -7,10 +7,12 @@ import { MessageSquareOff, X } from 'lucide-react';
 import { useSmsStatusController } from '../../controllers/admin/useSmsStatusController';
 import { verifyTwoStepCode } from '../../controllers/admin/usePersonController';
 import { Badge, Card, ConfirmDialog, btn, when } from '../components/admin/ui';
+import { useAuth } from '../../models/context/AuthContext';
 
 const MODE_TONE = { live: 'good', pilot: 'info', 'dry run': 'warn', off: 'bad' } as const;
 
 export default function SmsStatusCard() {
+    const { isAdmin } = useAuth();   // view-only admins see the settings but cannot change them
     const { status, error, confirm, closeConfirm, askOutage, counts, settings, askDryRun, pilotDraft, setPilotDraft, pilotError, addPilot, removePilot } = useSmsStatusController();
     if (!status && !error) return null;
     if (status && !status.configured) return null;   // the SMS service isn't deployed yet
@@ -18,7 +20,7 @@ export default function SmsStatusCard() {
     const outage = status?.outage;
     return (
         <Card title="Text alerts today" className="mb-4" action={
-            !outage && status?.configured
+            !outage && status?.configured && isAdmin
                 ? <button onClick={askOutage} className={btn.dangerPlain}><MessageSquareOff size={16} /> Declare SMS outage today</button>
                 : undefined
         }>
@@ -57,7 +59,7 @@ export default function SmsStatusCard() {
                                     {settings.updatedAt && <> Changed {when(settings.updatedAt)}.</>}
                                 </div>
                             </div>
-                            <button role="switch" aria-checked={settings.dryRun} aria-label="Dry run" onClick={() => askDryRun(!settings.dryRun)}
+                            <button role="switch" aria-checked={settings.dryRun} aria-label="Dry run" onClick={() => askDryRun(!settings.dryRun)} disabled={!isAdmin}
                                 className={'relative w-11 h-6 rounded-full transition flex-none ' + (settings.dryRun ? 'bg-amber-500' : 'bg-slate-300')}>
                                 <span className={'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ' + (settings.dryRun ? 'translate-x-5' : '')} />
                             </button>
@@ -69,16 +71,16 @@ export default function SmsStatusCard() {
                                 {settings.allowlist.map(n => (
                                     <li key={n} className="inline-flex items-center gap-1 rounded-full bg-slate-100 pl-2.5 pr-1 py-0.5 text-xs text-slate-700 tabular-nums">
                                         {n}
-                                        <button onClick={() => removePilot(n)} aria-label={`Remove ${n}`} className="p-0.5 rounded-full hover:bg-slate-200"><X size={12} /></button>
+                                        {isAdmin && <button onClick={() => removePilot(n)} aria-label={`Remove ${n}`} className="p-0.5 rounded-full hover:bg-slate-200"><X size={12} /></button>}
                                     </li>
                                 ))}
                                 {settings.allowlist.length === 0 && <li className="text-xs text-slate-400">None: everyone.</li>}
                             </ul>
-                            <form onSubmit={e => { e.preventDefault(); addPilot(); }} className="flex gap-2 mt-2">
+                            {isAdmin && <form onSubmit={e => { e.preventDefault(); addPilot(); }} className="flex gap-2 mt-2">
                                 <input value={pilotDraft} onChange={e => setPilotDraft(e.target.value)} placeholder="306-555-0111" inputMode="tel" aria-label="Pilot number to add"
                                     className="flex-1 min-w-0 px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#003DA5]/30" />
                                 <button type="submit" disabled={!pilotDraft.trim()} className={btn.plain}>Add</button>
-                            </form>
+                            </form>}
                             {pilotError && <p role="alert" className="text-xs text-red-700 mt-1">{pilotError}</p>}
                         </div>
                     </div>

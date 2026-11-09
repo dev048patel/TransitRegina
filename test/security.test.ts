@@ -17,12 +17,14 @@ const USER = '22222222-2222-4222-8222-222222222222';
 const SUSPENDED = '33333333-3333-4333-8333-333333333333';
 const OTHER = '44444444-4444-4444-8444-444444444444';
 const NEWCOMER = '55555555-5555-4555-8555-555555555555';
+const VIEWER = '66666666-6666-4666-8666-666666666666';
 /** Must match SITE.TERMS_VERSION in src/models/data/legal.ts */
 const TERMS = '2026-10-17.2';
 /** A token shaped like Supabase's: the middle part says whether the login passed the second step (aal2). */
 const jwt = (sub: string, aal: 'aal1' | 'aal2', codeAgeSeconds = 30) =>
     ['e30', Buffer.from(JSON.stringify({ sub, aal, amr: aal === 'aal2' ? [{ method: 'password', timestamp: 1 }, { method: 'totp', timestamp: Math.floor(Date.now() / 1000) - codeAgeSeconds }] : [{ method: 'password', timestamp: 1 }] })).toString('base64url'), 'signature'].join('.');
-const T = { admin: jwt(ADMIN, 'aal2'), adminStaleCode: jwt(ADMIN, 'aal2', 3600), adminDayOldCode: jwt(ADMIN, 'aal2', 13 * 3600), adminNoTwoStep: jwt(ADMIN, 'aal1'), user: jwt(USER, 'aal1'), suspended: jwt(SUSPENDED, 'aal1'), newcomer: jwt(NEWCOMER, 'aal1') };
+const T = { admin: jwt(ADMIN, 'aal2'), adminStaleCode: jwt(ADMIN, 'aal2', 3600), adminDayOldCode: jwt(ADMIN, 'aal2', 13 * 3600), adminNoTwoStep: jwt(ADMIN, 'aal1'), user: jwt(USER, 'aal1'), suspended: jwt(SUSPENDED, 'aal1'), newcomer: jwt(NEWCOMER, 'aal1'),
+    viewer: jwt(VIEWER, 'aal2'), viewerNoTwoStep: jwt(VIEWER, 'aal1'), viewerDayOldCode: jwt(VIEWER, 'aal2', 13 * 3600) };
 /** `terms`: the Terms version on the account's profile (everyone has agreed except the newcomer) */
 const TOKENS: Record<string, { id: string; role: string; status: string; terms?: string | null }> = {
     [T.admin]: { id: ADMIN, role: 'admin', status: 'active' },
@@ -32,6 +34,9 @@ const TOKENS: Record<string, { id: string; role: string; status: string; terms?:
     [T.user]: { id: USER, role: 'user', status: 'active' },
     [T.suspended]: { id: SUSPENDED, role: 'user', status: 'suspended' },
     [T.newcomer]: { id: NEWCOMER, role: 'user', status: 'active', terms: null },
+    [T.viewer]: { id: VIEWER, role: 'viewer', status: 'active' },
+    [T.viewerNoTwoStep]: { id: VIEWER, role: 'viewer', status: 'active' },
+    [T.viewerDayOldCode]: { id: VIEWER, role: 'viewer', status: 'active' },
 };
 /** Switch for one test: the terms columns have not been added to the database yet */
 let termsColumnMissing = false;
@@ -167,9 +172,8 @@ const ADMIN_ONLY: [string, string, unknown?][] = [
     ['PATCH', '/api/admin/routes/4', { hidden: true }],
     ['GET', '/api/analytics/visitors'],
     ['GET', '/api/analytics/summary'],
-    ['GET', '/api/features/weekly'],
-    ['GET', '/api/features/daily'],
-    ['GET', '/api/features/total'],
+    ['GET', '/api/admin/usage'],
+    ['GET', `/api/admin/users/${OTHER}/activity`],
     ['POST', '/api/sms/broadcast', { routeNum: '4', message: 'hello' }],
     ['GET', '/api/admin/sms'],
     ['POST', '/api/admin/sms/outage', { reason: 'testing' }],
@@ -440,10 +444,17 @@ test('phone sign-in is limited to a few tries a minute per address', async () =>
 /* ── findings from the October 2026 audit ── */
 
 test('the visitor is identified by their own address, not the proxy in front of the backend', async () => {
-    const seen = async (chain: string) => (await api('POST', '/api/analytics/beacon', { ip: chain, body: { page: '/' } })).json.sessionId.split('::')[0];
-    assert.equal(await seen('203.0.113.7, 152.233.40.1'), '203.0.113.7', 'visitor, then Railway');
-    assert.equal(await seen('6.6.6.6, 203.0.113.8, 152.233.40.1'), '203.0.113.8', 'an address the caller invented in front is ignored');
-    assert.equal(await seen('203.0.113.9'), '203.0.113.9');
+    // The visit id is a one-way hash now, so compare ids, and check the address stored with the visit
+    const seen = async (chain: string) => {
+        calls.length = 0;
+        const id = (await api('POST', '/api/analytics/beacon', { ip: chain, body: { page: '/' } })).json.sessionId;
+        return { id, ip: calls.find(c => c.method === 'POST' && c.url.startsWith('/rest/v1/visitor_sessions'))?.body.ip };
+    };
+    assert.equal((await seen('203.0.113.7, 152.233.40.1')).ip, '203.0.113.7', 'visitor, then Railway');
+    const plain = await seen('203.0.113.8, 152.233.40.1'), invented = await seen('6.6.6.6, 203.0.113.8, 152.233.40.1');
+    assert.equal(invented.id, plain.id, 'an address the caller invented in front is ignored');
+    assert.notEqual((await seen('203.0.113.9, 152.233.40.1')).id, plain.id, 'another visitor is another id');
+    assert.doesNotMatch(plain.id, /203\.0\.113/, 'the id does not contain the address');
 });
 
 test('two visitors behind the same proxy have separate rate limits', async () => {
@@ -535,13 +546,13 @@ test('arrive-by planning checks its input and answers with a plan', async () => 
 });
 
 test('usage tracking with no body is a bad request, not a server error', async () => {
-    const r = await fetch(base + '/api/features/track', { method: 'POST', headers: { 'X-Forwarded-For': freshIp() } });
+    const r = await fetch(base + '/api/analytics/events', { method: 'POST', headers: { 'X-Forwarded-For': freshIp() } });
     assert.equal(r.status, 400);
 });
 
-test('analytics tracking is rate limited', async () => {
-    const ip = freshIp(); let last = 200;
-    for (let i = 0; i < 125; i++) last = (await api('POST', '/api/features/track', { ip, body: { type: 'places' } })).status;
+test('usage tracking is rate limited', async () => {
+    const ip = freshIp(); let last = 204;
+    for (let i = 0; i < 125; i++) last = (await api('POST', '/api/analytics/events', { ip, body: { events: [{ kind: 'page_view', detail: { path: '/map' } }] } })).status;
     assert.equal(last, 429);
 });
 
@@ -565,9 +576,9 @@ test('a website that is not on the allow list is refused', async () => {
 });
 
 test('oversized and malformed bodies are refused without leaking details', async () => {
-    const big = await api('POST', '/api/features/track', { raw: JSON.stringify({ type: 'x'.repeat(50_000) }), headers: { 'Content-Type': 'application/json' } });
+    const big = await api('POST', '/api/analytics/events', { raw: JSON.stringify({ events: [{ kind: 'x'.repeat(50_000) }] }), headers: { 'Content-Type': 'application/json' } });
     assert.equal(big.status, 413);
-    const broken = await api('POST', '/api/features/track', { raw: '{"type":', headers: { 'Content-Type': 'application/json' } });
+    const broken = await api('POST', '/api/analytics/events', { raw: '{"events":', headers: { 'Content-Type': 'application/json' } });
     assert.equal(broken.status, 400);
     assert.doesNotMatch(broken.text, /SyntaxError|at JSON|node_modules/);
 });
@@ -1092,4 +1103,379 @@ test('no walking path far from any walkable way: the map keeps its straight line
     const r = await api('POST', '/api/walk', { body: { from: { lat: 50.37, lng: -104.80 }, to: { lat: 50.4495, lng: -104.6125 } } });
     assert.equal(r.status, 200);
     assert.equal(r.json.route, null);
+});
+
+/* ── Usage analytics: what riders do (Nov 2026) ── */
+
+const usageWrites = () => calls.filter(c => c.method === 'POST' && c.url.startsWith('/rest/v1/usage_events'));
+const PHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1';
+
+test('rider events keep only the allowed kinds and fields, cleaned', async () => {
+    const r = await api('POST', '/api/analytics/events', { headers: { 'User-Agent': PHONE_UA }, body: { events: [
+        { kind: 'place_searched', page: '/map', detail: { place: '  Cornwall Centre  ', lat: 50.44873219, lng: -104.61123, typed: 'cornw', userId: OTHER } },
+        { kind: 'bus_opened', detail: { bus: '2407', route: '7', speed: 55 } },
+        { kind: 'location', detail: { choice: 'maybe' } },
+        { kind: 'not_a_kind', detail: { x: 1 } },
+        { kind: 'sms_opt_in' },                                    // only the server may record this
+        { kind: 'stop_opened', page: '<script>', detail: { stop: '0589', name: 'x'.repeat(500) } },
+    ] } });
+    assert.equal(r.status, 204);
+    const rows = usageWrites().flatMap(c => c.body);
+    assert.deepEqual(rows.map((e: any) => e.kind), ['place_searched', 'bus_opened', 'location', 'stop_opened'], 'unknown and server-only kinds are dropped');
+    const search = rows[0];
+    assert.deepEqual(search.detail, { place: 'Cornwall Centre', lat: 50.449, lng: -104.611 }, 'what was typed is not kept; the area is rounded to about 100 m');
+    assert.equal(search.page, '/map');
+    assert.equal(search.device, 'Mobile');
+    assert.deepEqual(rows[1].detail, { bus: '2407', route: '7' }, 'fields not on the list are dropped');
+    assert.deepEqual(rows[2].detail, {}, 'a value not on the list is dropped');
+    assert.equal(rows[3].page, null, 'a page that is not a path is not stored');
+    assert.equal(rows[3].detail.name.length, 80, 'text is cut to its limit');
+    for (const e of rows) {
+        assert.equal(e.user_id, null, 'signed out: no account, whatever the body says');
+        assert.match(e.visitor, /^a:[A-Za-z0-9_-]{22}$/, 'an anonymous id');
+    }
+    assert.equal(usageWrites()[0].auth, 'service-key', 'written by the backend');
+});
+
+test('a signed-in rider\'s events are theirs, from the login token', async () => {
+    await api('POST', '/api/analytics/events', { token: T.user, body: { events: [{ kind: 'route_selected', detail: { route: '4' } }] } });
+    const row = usageWrites()[0].body[0];
+    assert.equal(row.user_id, USER);
+    assert.equal(row.visitor, `u:${USER}`);
+});
+
+test('crawlers are not counted, and batches are limited', async () => {
+    const bot = await api('POST', '/api/analytics/events', { headers: { 'User-Agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)' }, body: { events: [{ kind: 'page_view', detail: { path: '/' } }] } });
+    assert.equal(bot.status, 204);
+    assert.equal(usageWrites().length, 0, 'nothing stored for a crawler');
+    const many = Array.from({ length: 21 }, () => ({ kind: 'page_view', detail: { path: '/' } }));
+    assert.equal((await api('POST', '/api/analytics/events', { body: { events: many } })).status, 400, 'at most 20 per request');
+    assert.equal((await api('POST', '/api/analytics/events', { body: { events: 'page_view' } })).status, 400);
+});
+
+test('an anonymous visitor keeps one id all day, and gets a new one the next day', async () => {
+    const { visitorId } = await import('../src/models/services/UsageEvents');
+    const nine = new Date('2026-11-07T15:00:00Z'), tenPm = new Date('2026-11-08T04:00:00Z'), nextDay = new Date('2026-11-08T15:00:00Z');   // Regina 9 am, 10 pm, next 9 am
+    const id = (ip: string, at: Date) => visitorId(ip, PHONE_UA, null, at);
+    assert.equal(id('203.0.113.5', nine), id('203.0.113.5', tenPm), 'same Regina day, same id (10 pm Regina is already the next day in UTC)');
+    assert.notEqual(id('203.0.113.5', nine), id('203.0.113.5', nextDay), 'a new id each day');
+    assert.notEqual(id('203.0.113.5', nine), id('203.0.113.6', nine), 'another address is another visitor');
+    assert.notEqual(visitorId('203.0.113.5', PHONE_UA, null, nine), visitorId('203.0.113.5', 'Mozilla/5.0 (Windows NT 10.0) Chrome/130', null, nine), 'another browser is another visitor');
+    assert.equal(visitorId('203.0.113.5', PHONE_UA, USER, nine), `u:${USER}`, 'signed in: the account');
+});
+
+test("one visitor's summary is worked out from their events like the database does for a rider", async () => {
+    const { summarizeEvents } = await import('../src/models/services/UsageEvents');
+    const ev = (at: string, kind: string, session: string | null, detail: Record<string, unknown> = {}) => ({ at, kind, page: '/map', device: 'Mobile', session, detail });
+    const s = summarizeEvents([
+        ev('2026-11-07T15:00:00Z', 'page_view', 'a'), ev('2026-11-07T15:04:00Z', 'place_searched', 'a', { place: 'Lakeview' }),
+        ev('2026-11-07T15:10:00Z', 'place_searched', 'a', { place: 'Lakeview' }), ev('2026-11-07T15:11:00Z', 'trip_started', 'a', { rank: 0 }),
+        ev('2026-11-07T20:00:00Z', 'page_view', 'b'),   // looked once and left
+        ev('2026-11-07T20:01:00Z', 'place_searched', null, { place: '' }),
+    ], [['places', 'place_searched', 'place'], ['chosenRank', 'trip_started', 'rank']]);
+    assert.equal(s.kinds.find(k => k.kind === 'place_searched')?.events, 3);
+    assert.deepEqual(s.sessions, { sessions: 2, avg_minutes: 5.5, median_minutes: 5.5, avg_pages: 1, bounce_rate: 50 });
+    assert.deepEqual(s.top.places, [{ value: 'Lakeview', events: 2, visitors: 1 }], 'empty values are not counted');
+    assert.deepEqual(s.top.chosenRank, [{ value: '0', events: 1, visitors: 1 }], 'the recommended option (rank 0) still counts');
+    assert.deepEqual(s.hours.find(h => h.events === 4), { weekday: 6, hour: 9, events: 4 }, 'Regina time: Saturday 9 am');
+    assert.deepEqual(s.devices, [{ device: 'Mobile', visitors: 1 }]);
+});
+
+test('turning texts on and verifying a phone are recorded by the server, not the app', async () => {
+    answer = profileWith({ mobile_number: '+13065550111', mobile_verified: true });
+    assert.equal((await api('POST', '/api/sms/opt-in', { token: T.user })).status, 200);
+    await settle();   // recorded without making the rider wait
+    const row = usageWrites()[0]?.body[0];
+    assert.equal(row?.kind, 'sms_opt_in');
+    assert.equal(row?.user_id, USER);
+    calls.length = 0;
+    assert.equal((await api('POST', '/api/sms/opt-out', { token: T.user })).status, 200);
+    await settle();
+    assert.equal(usageWrites()[0]?.body[0]?.kind, 'sms_opt_out');
+});
+
+test('the usage page counts in the database by Regina day, and compares with the period before', async () => {
+    answer = (method, url, body) => {
+        if (!url.startsWith('/rest/v1/rpc/')) return undefined;
+        const fn = url.split('/rpc/')[1].split('?')[0];
+        const thisPeriod = body?.p_from === '2026-11-01T06:00:00.000Z' || new Date(body?.p_from).getTime() > Date.now() - 8 * 86_400_000;
+        if (fn === 'usage_days') return thisPeriod
+            ? [{ day: new Date().toISOString().slice(0, 10), visitors: 40, riders: 6, page_views: 900, searches: 30, trips: 9 }]
+            : [{ day: '2026-01-01', visitors: 20, riders: 3, page_views: 400, searches: 10, trips: 9 }];
+        if (fn === 'usage_kinds') return [{ kind: 'page_view', events: 900, visitors: 40 }, { kind: 'place_searched', events: 30, visitors: 25 }, { kind: 'suggestions_shown', events: 28, visitors: 20 }, { kind: 'trip_started', events: 9, visitors: 8 }, { kind: 'trip_texts_on', events: 2, visitors: 2 }];
+        if (fn === 'usage_top' && body.p_kind === 'page_view') return [{ value: '/map', events: 700, visitors: 35 }, { value: '/', events: 200, visitors: 30 }];
+        if (fn === 'usage_top' && body.p_kind === 'place_searched') return [{ value: 'Cornwall Centre', events: 12, visitors: 9 }];
+        return [];
+    };
+    const r = await api('GET', '/api/admin/usage?days=7', { token: T.admin });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.setup, true);
+    assert.deepEqual(r.json.totals, { visitors: 40, riders: 6, pageViews: 900, searches: 30, trips: 9 });
+    assert.deepEqual(r.json.previous, { visitors: 20, riders: 3, pageViews: 400, searches: 10, trips: 9 });
+    assert.equal(r.json.daily.length, 7, 'every day in the range, quiet ones included');
+    assert.deepEqual(r.json.funnel.map((f: any) => f.visitors), [35, 25, 20, 8, 2], 'map opened → searched → saw options → trip → texts');
+    assert.deepEqual(r.json.top.places, [{ value: 'Cornwall Centre', events: 12, visitors: 9 }]);
+    // The range is whole Regina days: 7 days ending tonight at Regina midnight (06:00 UTC)
+    const days = calls.find(c => c.url.startsWith('/rest/v1/rpc/usage_days'))!.body;
+    assert.match(days.p_from, /T06:00:00\.000Z$/);
+    assert.equal((new Date(days.p_to).getTime() - new Date(days.p_from).getTime()) / 86_400_000, 7);
+    for (const c of calls.filter(c => c.url.startsWith('/rest/v1/rpc/'))) assert.equal(c.auth, 'service-key');
+});
+
+test('the usage page checks its range, and says when tracking is not set up', async () => {
+    for (const bad of ['0', '91', 'x', '7.5']) assert.equal((await api('GET', `/api/admin/usage?days=${bad}`, { token: T.admin })).status, 400, bad);
+    answer = (method, url) => url.startsWith('/rest/v1/rpc/') ? [404, { code: 'PGRST202', message: 'Could not find the function public.usage_days' }] : undefined;
+    const r = await api('GET', '/api/admin/usage', { token: T.admin });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json, { setup: false });
+});
+
+test('looking at one rider\'s activity is recorded', async () => {
+    answer = (method, url) => url.startsWith('/rest/v1/usage_events') && method === 'GET'
+        ? [{ at: '2026-11-07T15:00:00Z', kind: 'place_searched', page: '/map', device: 'Mobile', detail: { place: 'Cornwall Centre' } }] : undefined;
+    const r = await api('GET', `/api/admin/users/${OTHER}/activity`, { token: T.admin });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.events[0].detail.place, 'Cornwall Centre');
+    const query = calls.find(c => c.method === 'GET' && c.url.startsWith('/rest/v1/usage_events'))!;
+    assert.match(query.url, new RegExp(`user_id=eq\\.${OTHER}`), 'only that rider');
+    await settle();
+    assert.ok(events.recent().some(e => e.type === 'personal_data_viewed' && e.message.includes(OTHER) && e.userId === ADMIN), 'recorded against the admin who looked');
+    assert.equal((await api('GET', '/api/admin/users/not-a-uuid/activity', { token: T.admin })).status, 400);
+});
+
+test('the admin home trend is counted in the database, not read row by row', async () => {
+    answer = (method, url) => url.startsWith('/rest/v1/rpc/usage_days') ? [{ day: new Date(Date.now() - 6 * 3_600_000).toISOString().slice(0, 10), visitors: 5, riders: 1, page_views: 50, searches: 4, trips: 2 }] : undefined;
+    const r = await api('GET', '/api/admin/overview', { token: T.admin });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.trend.length, 7);
+    assert.deepEqual(Object.keys(r.json.trend[0]).sort(), ['day', 'searches', 'trips', 'visitors']);
+    assert.ok(!calls.some(c => c.url.startsWith('/rest/v1/feature_events')), 'the old row-by-row counter is gone');
+    assert.equal(r.json.usageReady, true);
+});
+
+test('"On the app now" includes riders who only have the app open, from the 60-second heartbeat', async () => {
+    const ip = freshIp(), older = new Date(Date.now() - 3 * 60_000).toISOString();
+    await api('POST', '/api/analytics/heartbeat', { ip, headers: { 'User-Agent': PHONE_UA }, body: { page: '/map' } });   // signed out, just watching buses
+    await api('POST', '/api/analytics/heartbeat', { token: T.user, headers: { 'User-Agent': PHONE_UA }, body: { page: '/map' } });
+    await api('POST', '/api/analytics/heartbeat', { headers: { 'User-Agent': 'Googlebot/2.1' }, body: { page: '/map' } });
+    answer = (method, url) => url.startsWith('/rest/v1/rpc/usage_now')
+        ? [{ visitor: `u:${USER}`, user_id: USER, last_at: older, last_kind: 'place_searched', last_page: '/map', device: 'Mobile', events: 4 }] : undefined;
+    const r = await api('GET', '/api/admin/usage/now', { token: T.admin });
+    assert.equal(r.status, 200);
+    const { visitorId } = await import('../src/models/services/UsageEvents');
+    const anon = r.json.visitors.find((v: any) => v.visitor === visitorId(ip, PHONE_UA, null).slice(2));
+    assert.ok(anon, 'the signed-out rider is listed though they did nothing but keep the map open');
+    assert.deepEqual([anon.kind, anon.page, anon.device, anon.userId], ['still_here', '/map', 'Mobile', null]);
+    const rider = r.json.visitors.filter((v: any) => v.userId === USER);
+    assert.equal(rider.length, 1, 'one line per rider, not one for the action and one for the heartbeat');
+    assert.equal(rider[0].kind, 'still_here', 'the heartbeat is newer than their last action');
+    assert.ok(Date.parse(rider[0].at) > Date.parse(older));
+    assert.ok(!r.json.visitors.some((v: any) => v.device === 'Desktop' && v.kind === 'still_here' && v.visitor?.startsWith?.('a:')), 'crawlers are not people');
+});
+
+/* ── deeper admin insights (script 012): view-only admins, reports, notes, texts, speed and errors ── */
+
+test('a view-only admin can look at every admin page but change nothing', async () => {
+    for (const p of ['/api/admin/overview', '/api/admin/usage', '/api/admin/usage/now', '/api/admin/reports', '/api/admin/activity', `/api/admin/users/${USER}`, `/api/admin/users/${OTHER}/activity`, '/api/admin/security', '/api/admin/sms/stats', '/api/analytics/summary'])
+        assert.ok(![401, 403].includes((await api('GET', p, { token: T.viewer })).status), `${p} is let through`);
+    const changes: [string, string, unknown?][] = [
+        ['DELETE', `/api/admin/users/${OTHER}`], ['PATCH', `/api/admin/users/${OTHER}`, { role: 'admin' }], ['PATCH', `/api/admin/users/${OTHER}`, { full_name: 'X' }],
+        ['POST', '/api/admin/fac/set', { userId: OTHER, feature: 'weekly_planner', enabled: false }], ['POST', '/api/admin/security/handled', { ids: [1] }],
+        ['POST', '/api/admin/sms/outage', { reason: 'x' }], ['POST', `/api/admin/users/${OTHER}/notes`, { note: 'hello' }], ['DELETE', '/api/admin/notes/1'],
+        ['POST', '/api/admin/reports/handled', { ids: [1] }], ['PATCH', '/api/admin/routes/4', { hidden: true }],
+    ];
+    for (const [method, p, body] of changes) assert.equal((await api(method, p, { token: T.viewer, body })).status, 403, `${method} ${p}`);
+    // reads go out as HEAD (counts) and POST /rpc (database functions); a change is anything else
+    const changed = backendWrites().filter(c => c.method !== 'HEAD' && !c.url.startsWith('/rest/v1/rpc/') && !/^\/rest\/v1\/(usage_events|visitor_sessions)/.test(c.url));   // their own visit is still counted
+    assert.deepEqual(changed.map(c => `${c.method} ${c.url.split('?')[0]}`), [], 'nothing was changed');
+});
+
+test('a view-only admin needs two-step sign-in, renewed every 12 hours, like an admin', async () => {
+    assert.equal((await api('GET', '/api/admin/overview', { token: T.viewerNoTwoStep })).status, 403);
+    assert.equal((await api('GET', '/api/admin/overview', { token: T.viewerDayOldCode })).status, 403);
+    assert.equal((await api('GET', '/api/admin/overview', { token: T.user })).status, 403, 'a rider is still refused');
+});
+
+test('granting view-only access needs a fresh code, and an admin cannot make themselves view-only', async () => {
+    assert.equal((await api('PATCH', `/api/admin/users/${OTHER}`, { token: T.adminStaleCode, body: { role: 'viewer' } })).json?.code, 'fresh_two_step_required');
+    assert.equal((await api('PATCH', `/api/admin/users/${OTHER}`, { token: T.admin, body: { role: 'viewer' } })).status, 200);
+    const write = calls.find(c => c.method === 'PATCH' && c.url.startsWith('/rest/v1/profiles'));
+    assert.equal(write?.body.role, 'viewer');
+    assert.equal((await api('PATCH', `/api/admin/users/${ADMIN}`, { token: T.admin, body: { role: 'viewer' } })).status, 400, 'no demoting yourself');
+    assert.equal((await api('PATCH', `/api/admin/users/${OTHER}`, { token: T.admin, body: { role: 'owner' } })).status, 400);
+});
+
+const reportWrites = () => calls.filter(c => c.method === 'POST' && c.url.startsWith('/rest/v1/rider_reports'));
+
+test('a rider can report a problem, signed in or not, and only clean fields are kept', async () => {
+    const r = await api('POST', '/api/analytics/report', { headers: { 'User-Agent': PHONE_UA }, body: { kind: 'bus_no_show', stop: '1234', route: '4>15', bus: '2407', note: '  Waited 20 min  ', shown: 'Due in 2 min', page: '/map', userId: OTHER } });
+    assert.equal(r.status, 200);
+    const row = reportWrites()[0];
+    assert.equal(row.auth, 'service-key');
+    assert.deepEqual({ ...row.body, visitor: undefined }, { user_id: null, visitor: undefined, kind: 'bus_no_show', stop: '1234', route: '4>15', bus: '2407', note: 'Waited 20 min', context: { page: '/map', shown: 'Due in 2 min', device: 'Mobile' } });
+    assert.match(row.body.visitor, /^a:/, 'signed out: anonymous, whatever the body says');
+    calls.length = 0;
+    await api('POST', '/api/analytics/report', { token: T.user, body: { kind: 'app_problem' } });
+    assert.equal(reportWrites()[0].body.user_id, USER, 'signed in: from the login token');
+});
+
+test('a bad report is refused before reaching the database, and reports are rate limited', async () => {
+    for (const bad of [{ kind: 'spam' }, { kind: 'other', stop: '12a' }, { kind: 'other', route: '4; drop' }, { kind: 'other', bus: '-1' }, { kind: 'other', note: 'x'.repeat(501) }, { kind: 'other', note: 5 }, { kind: 'other', shown: 'x'.repeat(81) }, {}])
+        assert.equal((await api('POST', '/api/analytics/report', { body: bad })).status, 400, JSON.stringify(bad).slice(0, 60));
+    assert.equal(reportWrites().length, 0);
+    const ip = freshIp();
+    const codes = [];
+    for (let i = 0; i < 6; i++) codes.push((await api('POST', '/api/analytics/report', { ip, body: { kind: 'other' } })).status);
+    assert.deepEqual(codes, [200, 200, 200, 200, 200, 429], 'five a minute from one address');
+});
+
+test('the reports inbox lists open reports, marks them handled, and records who did', async () => {
+    answer = (method, url) => url.startsWith('/rest/v1/rider_reports') && method === 'GET'
+        ? [{ id: 7, at: '2026-11-07T15:00:00Z', user_id: USER, visitor: `u:${USER}`, kind: 'bus_no_show', stop: '1234', route: '4', bus: null, note: 'late', context: {}, handled_at: null, handled_by: null }]
+        : url.startsWith('/rest/v1/rider_reports') && method === 'PATCH' ? [{ id: 7 }] : undefined;
+    const r = await api('GET', '/api/admin/reports', { token: T.admin });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.reports[0].who, `user-${USER.slice(0, 4)}@example.com`, 'named by email');
+    assert.match(calls.find(c => c.method === 'GET' && c.url.startsWith('/rest/v1/rider_reports'))!.url, /handled_at=is\.null/);
+    for (const bad of [[], ['7'], [0], Array(301).fill(1)]) assert.equal((await api('POST', '/api/admin/reports/handled', { token: T.admin, body: { ids: bad } })).status, 400);
+    assert.equal((await api('POST', '/api/admin/reports/handled', { token: T.admin, body: { ids: [7] } })).status, 200);
+    const update = calls.find(c => c.method === 'PATCH' && c.url.startsWith('/rest/v1/rider_reports'))!;
+    assert.equal(update.body.handled_by, ADMIN);
+    await settle();
+    assert.ok(events.recent().some(e => e.type === 'reports_handled' && e.userId === ADMIN));
+    answer = (method, url) => url.startsWith('/rest/v1/rider_reports') ? [404, { code: 'PGRST205', message: 'no table' }] : undefined;
+    assert.deepEqual((await api('GET', '/api/admin/reports', { token: T.admin })).json, { setup: false, reports: [] }, 'before script 012');
+});
+
+test('admins can keep notes on an account; each one is recorded against that account', async () => {
+    answer = (method, url) => url.startsWith('/rest/v1/admin_notes') && method === 'POST' ? [{ id: 3, at: '2026-11-08T15:00:00Z' }]
+        : url.startsWith('/rest/v1/admin_notes') && method === 'DELETE' ? [{ user_id: OTHER }] : undefined;
+    for (const note of ['', '   ', 'x'.repeat(1001), 7]) assert.equal((await api('POST', `/api/admin/users/${OTHER}/notes`, { token: T.admin, body: { note } })).status, 400);
+    assert.equal((await api('POST', `/api/admin/users/${OTHER}/notes`, { token: T.admin, body: { note: '  Called 5 Nov  ', author: OTHER } })).status, 200);
+    const insert = calls.find(c => c.method === 'POST' && c.url.startsWith('/rest/v1/admin_notes'))!;
+    assert.deepEqual(insert.body, { user_id: OTHER, author: ADMIN, note: 'Called 5 Nov' }, 'the author is the signed-in admin, never the body');
+    assert.equal((await api('DELETE', '/api/admin/notes/3', { token: T.admin })).status, 200);
+    assert.equal((await api('DELETE', '/api/admin/notes/abc', { token: T.admin })).status, 400);
+    await settle();
+    const logged = calls.filter(c => c.method === 'POST' && c.url.startsWith('/rest/v1/security_events')).map(c => c.body).flat();
+    assert.ok(logged.some((e: any) => e.type === 'note_added' && e.target_user === OTHER));
+    assert.ok(logged.some((e: any) => e.type === 'note_deleted' && e.target_user === OTHER));
+});
+
+test('one rider in depth: texts, saved things and notes come with their activity', async () => {
+    answer = (method, url) => {
+        if (method !== 'GET') return undefined;
+        if (url.startsWith('/rest/v1/messages')) return [{ kind: 'leave_now', status: 'failed', error_code: 30003, segments: 1, created_at: '2026-11-07T15:00:00Z' }];
+        if (url.startsWith('/rest/v1/weekly_schedules')) return [{ day_of_week: 1, enabled: true, depart_by: '08:00:00', arrive_by: null, route_num: '4' }];
+        if (url.startsWith('/rest/v1/admin_notes')) return [{ id: 1, at: '2026-11-07T15:00:00Z', note: 'Called', author: ADMIN }];
+        return undefined;
+    };
+    const r = await api('GET', `/api/admin/users/${OTHER}/activity`, { token: T.admin });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.texts[0].error_code, 30003);
+    assert.equal(r.json.saved.weekly[0].route_num, '4');
+    assert.equal(r.json.notes[0].author, `admin-${ADMIN.slice(0, 4)}@example.com`, 'the author is named, not an id');
+    for (const c of calls.filter(c => c.method === 'GET' && /\/rest\/v1\/(messages|weekly_schedules|admin_notes|saved_destinations)/.test(c.url)))
+        assert.match(c.url, new RegExp(`user_id=eq\\.${OTHER}`), `${c.url.split('?')[0]}: only that rider`);
+});
+
+test('the text message numbers fill every day, add up the cost, and count riders through setup', async () => {
+    answer = (method, url, body) => {
+        if (url.startsWith('/rest/v1/rpc/sms_daily')) return [{ day: body.p_to.slice(0, 10) === new Date(Date.now() + 86_400_000).toISOString().slice(0, 10) ? '' : '', sent: 0 }].slice(0, 0).concat([{ day: new Date(new Date(body.p_to).getTime() - 18 * 3_600_000).toISOString().slice(0, 10), sent: 10, delivered: 8, failed: 2, dry_run: 0, segments: 12, cost: 0.0948 }] as any);
+        if (url.startsWith('/rest/v1/rpc/sms_failures')) return [{ error_code: 30003, failed: 2 }];
+        if (url.startsWith('/rest/v1/rpc/usage_kinds')) return [{ kind: 'phone_code_sent', events: 9, visitors: 6 }, { kind: 'phone_verified', events: 5, visitors: 5 }, { kind: 'sms_opt_in', events: 4, visitors: 4 }];
+        return undefined;
+    };
+    const r = await api('GET', '/api/admin/sms/stats?days=7', { token: T.admin });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.daily.length, 7);
+    assert.deepEqual(r.json.total, { sent: 10, delivered: 8, failed: 2, segments: 12, cost: 0.0948 });
+    assert.equal(r.json.daily[6].sent, 10, 'today is the last day');
+    assert.deepEqual(r.json.verification.map((v: any) => v.riders), [6, 5, 4, 0]);
+    assert.deepEqual(r.json.failures, [{ error_code: 30003, failed: 2 }]);
+    assert.equal((await api('GET', '/api/admin/sms/stats?days=0', { token: T.admin })).status, 400);
+});
+
+test('a custom date range is whole Regina days, up to a year', async () => {
+    const r = await api('GET', '/api/admin/usage?from=2026-10-01&to=2026-10-31', { token: T.admin });
+    assert.equal(r.status, 200);
+    const asked = calls.filter(c => c.url.startsWith('/rest/v1/rpc/usage_days')).map(c => c.body);
+    assert.ok(asked.some(q => q.p_from === '2026-10-01T06:00:00.000Z' && q.p_to === '2026-11-01T06:00:00.000Z'), 'from Regina midnight, the last day included');
+    assert.ok(asked.some(q => q.p_from === '2026-08-31T06:00:00.000Z' && q.p_to === '2026-10-01T06:00:00.000Z'), 'compared with the 31 days before');
+    for (const bad of ['from=2026-10-31&to=2026-10-01', 'from=2025-01-01&to=2026-10-01', 'from=2026-10-01', 'from=yesterday&to=today'])
+        assert.equal((await api('GET', `/api/admin/usage?${bad}`, { token: T.admin })).status, 400, bad);
+});
+
+test('who is on now and the search map come from the database, and check their input', async () => {
+    (await import('../src/models/services/UsageEvents')).forgetPresence();   // earlier tests' heartbeats; this one is about the database rows
+    answer = (method, url) => url.startsWith('/rest/v1/rpc/usage_now') ? [{ visitor: `u:${USER}`, user_id: USER, last_at: '2026-11-08T15:00:00Z', last_kind: 'stop_opened', last_page: '/map', device: 'Mobile', events: '4' }, { visitor: 'a:abcdefghijklmnopqrstuv', user_id: null, last_at: '2026-11-08T15:01:00Z', last_kind: 'page_view', last_page: '/', device: 'Desktop', events: 1 }]
+        : url.startsWith('/rest/v1/rpc/usage_points') ? [{ lat: '50.449', lng: '-104.611', events: '12', label: 'Cornwall Centre' }] : undefined;
+    const now = await api('GET', '/api/admin/usage/now', { token: T.admin });
+    assert.deepEqual(now.json.visitors.map((v: any) => v.who), ['Visitor abcdef', `user-${USER.slice(0, 4)}@example.com`], 'newest first; signed-out riders stay anonymous');
+    assert.equal(now.json.visitors[1].events, 4);
+    const pts = await api('GET', '/api/admin/usage/points?days=30', { token: T.admin });
+    assert.deepEqual(pts.json.points, [{ lat: 50.449, lng: -104.611, events: 12, label: 'Cornwall Centre' }]);
+    assert.equal((await api('GET', '/api/admin/usage/points?kind=page_view', { token: T.admin })).status, 400);
+    assert.equal((await api('GET', '/api/admin/usage/points?days=500', { token: T.admin })).status, 400);
+});
+
+test('the activity log filters by kind, admin and account on the server', async () => {
+    await api('GET', `/api/admin/activity?type=note_added&admin=${ADMIN}&target=${OTHER}`, { token: T.admin });
+    const q = decodeURIComponent(calls.find(c => c.method === 'GET' && c.url.startsWith('/rest/v1/security_events'))!.url);
+    assert.match(q, /type=in\.\(note_added\)/);
+    assert.match(q, new RegExp(`user_id=eq\\.${ADMIN}`));
+    assert.match(q, new RegExp(`target_user\\.eq\\.${OTHER}`));
+    for (const bad of ['type=auth_failed', 'admin=x', `target=${OTHER},role.eq.admin`]) assert.equal((await api('GET', `/api/admin/activity?${bad}`, { token: T.admin })).status, 400, bad);
+});
+
+test('visits, speed and errors are kept, with nothing personal in the errors', async () => {
+    await api('POST', '/api/analytics/events', { body: { events: [
+        { kind: 'session_start', session: 'visit_abc12345', detail: { browser: 'Safari', os: 'iOS', screen: '390x844', lang: 'en-CA', source: 'openregina.ca', installed: 'yes', connection: '4g', ip: '1.2.3.4' } },
+        { kind: 'vitals', session: 'bad session!', detail: { name: 'LCP', value: 2104.56789, rating: 'good' } },
+        { kind: 'vitals', detail: { name: 'XYZ', value: -5 } },
+        { kind: 'timing', detail: { what: 'map_load', ms: 812 } },
+        { kind: 'app_error', detail: { message: `Failed for rider@example.com, user ${OTHER}, phone +1 306-555-0111, ?token=abc123`, where: 'MapView' } },
+        { kind: 'api_error', detail: { endpoint: `/api/admin/users/${OTHER}/activity?days=7`, status: 500 } },
+        { kind: 'api_error', detail: { endpoint: '/api/stops/1234/predictions', status: 0 } },
+    ] } });
+    const rows = usageWrites().flatMap(c => c.body);
+    assert.equal(rows[0].session, 'visit_abc12345');
+    assert.equal(rows[0].detail.ip, undefined, 'fields not on the list are dropped');
+    assert.equal(rows[0].detail.source, 'openregina.ca');
+    assert.equal(rows[1].session, null, 'a malformed visit id is not stored');
+    assert.deepEqual(rows[1].detail, { name: 'LCP', value: 2104.568, rating: 'good' });
+    assert.deepEqual(rows[2].detail, {}, 'an unknown measurement and a negative value are dropped');
+    assert.deepEqual(rows[3].detail, { what: 'map_load', ms: 812 });
+    const msg = rows[4].detail.message as string;
+    for (const leak of ['rider@example.com', OTHER, '306-555-0111', 'abc123']) assert.ok(!msg.includes(leak), `no ${leak} in "${msg}"`);
+    assert.equal(rows[5].detail.endpoint, '/api/admin/users/:id/activity', 'no account id or query string');
+    assert.equal(rows[6].detail.endpoint, '/api/stops/:n/predictions');
+});
+
+test('usage alerts: a real drop or a run of failed texts, not a quiet night', async () => {
+    const { isUsageDrop, isSmsTrouble, digestText } = await import('../src/models/services/UsageAlerts');
+    assert.equal(isUsageDrop(5, 100), true, 'a twentieth of last week');
+    assert.equal(isUsageDrop(40, 100), false);
+    assert.equal(isUsageDrop(0, 20), false, 'too few last week to tell (3 am)');
+    assert.equal(isSmsTrouble(20, 8), true);
+    assert.equal(isSmsTrouble(20, 4), false);
+    assert.equal(isSmsTrouble(5, 5), false, 'too few to tell');
+    const text = digestText({ week: { visitors: 120, riders: 20, searches: 300, trips: 80 }, before: { visitors: 100, riders: 20, searches: 0, trips: 100 }, places: [{ value: 'Cornwall Centre', events: 40 }],
+        unmet: [{ place: 'Costco East', looked: 12, no_options: 5, over_hour: 3, trips: 1 }], openReports: 2, texts: { sent: 50, failed: 1, cost: 0.47 }, signups: 4 });
+    for (const bit of ['120', '+20%', '−20%', 'Cornwall Centre', 'Costco East', 'Open rider reports: 2', '$0.47']) assert.ok(text.includes(bit), `digest mentions ${bit}`);
+});
+
+test('deleting an account also deletes problem reports and notes, and does not stop at a table not set up yet', async () => {
+    const signedIn = { access_token: T.user, refresh_token: 'r', token_type: 'bearer', expires_in: 3600, user: { id: USER, aud: 'authenticated', email: 'user@example.com' } };
+    answer = (method, url, body) => {
+        if (url.startsWith('/auth/v1/token')) return signedIn;
+        if (method === 'DELETE' && url.startsWith('/rest/v1/usage_events')) return [404, { code: 'PGRST205', message: 'Could not find the table public.usage_events' }];
+        return undefined;
+    };
+    const r = await api('DELETE', '/api/auth/account', { token: T.user, body: { password: 'correct-password' } });
+    assert.equal(r.status, 200, r.text);
+    const deleted = calls.filter(c => c.method === 'DELETE' && c.url.startsWith('/rest/v1/')).map(c => c.url.split('?')[0].replace('/rest/v1/', ''));
+    for (const t of ['rider_reports', 'admin_notes', 'profiles']) assert.ok(deleted.includes(t), t);
+    answer = (method, url) => method === 'DELETE' && url.startsWith('/rest/v1/rider_reports') ? [500, { code: 'XX000', message: 'disk full' }] : url.startsWith('/auth/v1/token') ? signedIn : undefined;
+    assert.equal((await api('DELETE', '/api/auth/account', { token: T.user, body: { password: 'correct-password' } })).status, 500, 'a real failure still stops it');
 });

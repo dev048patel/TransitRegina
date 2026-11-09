@@ -85,6 +85,9 @@ const RIDER_DATA: [table: string, column: string, schema?: 'sms'][] = [
     ['push_subscriptions', 'user_id'],
     ['feature_access', 'user_id'],
     ['visitor_sessions', 'user_id'],
+    ['usage_events', 'user_id'],
+    ['rider_reports', 'user_id'],   // the note is the rider's own words
+    ['admin_notes', 'user_id'],
     ['user_preferences', 'id'],
     ['profiles', 'id'],
 ];
@@ -102,7 +105,8 @@ router.delete('/account', requireAuth, rateLimit('delete-account', 3), async (re
     const db = serviceDb();
     for (const [table, column, schema] of RIDER_DATA) {
         const { error } = await (schema ? db.schema(schema) : db).from(table).delete().eq(column, id);
-        if (error) {
+        // A table that does not exist yet (its setup script not run) holds nothing to delete
+        if (error && !['42P01', 'PGRST205'].includes(error.code ?? '')) {
             console.error(`[Auth] Account deletion stopped at ${table}:`, error.message);
             res.status(500).json({ error: 'Your account could not be fully deleted. Please try again, or contact us and we will finish it.' });
             return;

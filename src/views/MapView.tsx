@@ -21,6 +21,7 @@ import TrackingPanel from './components/transit/TrackingPanel';
 import UserLocationMarker from './components/transit/UserLocationMarker';
 import LiveBusMarker, { ABOVE_BUSES_Z } from './components/transit/LiveBusMarker';
 import { useMarkerCharacter } from '../controllers/useMarkerCharacter';
+import { useUsageTracking } from '../controllers/hooks/useUsageTracking';
 import { useTripWalksController } from '../controllers/useWalkPathsController';
 import { stopIconFor } from '../models/data/stopIcons';
 import { applyCharacterTheme } from '../models/data/characterThemes';
@@ -71,6 +72,8 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // Bus stops are drawn to match the user's chosen map character
   const { character } = useMarkerCharacter();
+  // What riders do, for the admin Usage page
+  const { track } = useUsageTracking();
   const stopIcon = stopIconFor(character);
   const placePin = destinationPinFor(character);
 
@@ -90,6 +93,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // Handle stop marker click — open the departure board panel
   const handleStopClick = (stop: Stop) => {
+    track('stop_opened', { stop: stop.STOP_ID, name: stop.STOP_NAME });
     setSelectedStop(stop);
     setShowStopDetail(true);
     setShowBusSuggestions(false);
@@ -169,7 +173,10 @@ export const MapView: React.FC<MapViewProps> = ({
   }, [shownPreview]);
 
   // When a route card is clicked, start tracking and recenter to user GPS
-  const handleSelectRoute = (option: TripOption) => {
+  const tripStartedAt = useRef(0);
+  const handleSelectRoute = (option: TripOption, rank?: number) => {
+    tripStartedAt.current = Date.now();
+    track('trip_started', { routes: option.segments.map(s => s.routeNum).join('>'), minutes: Math.round(option.totalTimeWithWait ?? option.totalTime), place: selectedPlaceMarker?.name?.split(',')[0], rank });
     riderCentered.current = true;
     setActiveTracking(option);
     setShowBusSuggestions(false);
@@ -181,6 +188,7 @@ export const MapView: React.FC<MapViewProps> = ({
   };
 
   const handleStopTracking = () => {
+    track('trip_stopped', { how: 'stopped', after_min: Math.round((Date.now() - tripStartedAt.current) / 60_000) });
     setActiveTracking(null);
     setSelectedRoute(null);
     setSelectedPlaceMarker(null); // Remove the destination marker from map
@@ -188,6 +196,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // Go back to suggestions without clearing the destination
   const handleBackToSuggestions = () => {
+    track('trip_stopped', { how: 'back', after_min: Math.round((Date.now() - tripStartedAt.current) / 60_000) });
     setActiveTracking(null);
     setShowBusSuggestions(true);
   };
@@ -248,6 +257,7 @@ export const MapView: React.FC<MapViewProps> = ({
           routes={routes}
           selectedRoute={selectedRoute}
           onRouteSelect={(routeNum) => {
+            if (routeNum) track('route_selected', { route: routeNum });
             setSelectedRoute(routeNum);
             // Clearing the route also lets go of the bus that picked it
             if (!routeNum) setSelectedBus(null);
@@ -408,6 +418,7 @@ export const MapView: React.FC<MapViewProps> = ({
               selected={selectedBus?.bus_id === bus.bus_id}
               zoom={currentZoom}
               onSelect={() => {
+                track('bus_opened', { bus: String(bus.bus_id), route: String(bus.route_num) });
                 setSelectedBus(bus);
                 setSelectedRoute(String(bus.route_num));
               }}

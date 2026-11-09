@@ -24,7 +24,7 @@ export const SITE = {
 export const AT_A_GLANCE: string[] = [
     `${SITE.brand} is a free, unofficial project by ${SITE.operators}. It is not the City of Regina or Regina Transit.`,
     "Bus positions and times are estimates and can be wrong. Don't rely on them for anything time-critical; we aren't responsible for missed buses.",
-    'We store your name, email, optional phone number and what you save, plus visitor and security logs (IP address, browser, pages visited).',
+    'We store your name, email, optional phone number and what you save, plus visitor, usage and security logs (IP address, browser, pages visited, what you do in the app).',
     "We use it only to run the service, send reminders you turn on, and keep it secure. We don't sell it or show ads.",
     `It is stored in ${SITE.DATA_REGION} by Supabase. Google Maps, our hosts and Twilio may process some of it in the United States.`,
     'Location, text reminders and notifications are separate choices you can say no to. You can delete your account and its data at any time from your Profile.',
@@ -82,6 +82,10 @@ export const LEGAL_PAGES: Record<'about' | 'privacy' | 'terms', LegalPageContent
                     "Your location: while you use the map, your device's location is used in your browser to show you on the map and find stops and trips near you. We don't send it to our servers or keep a history of where you have been.",
                     'What you search for: addresses you type into search are sent to Google to find matching places.',
                     'Visitor logs: your IP address, browser, operating system, device type, the pages you open and when; linked to your account if you are signed in.',
+                    'How you use the app: the places you pick from the search box or the map and their general area (never what you type), the routes, stops and buses you look at, the trips you start and the features you use, with the time and your kind of device. Linked to your account if you are signed in; otherwise to an anonymous code that changes every day and cannot be traced back to you. We use it to see what riders need and to improve the service, and only our admins can see it.',
+                    'Visits and app performance: when a visit starts and ends, your browser, operating system, screen size, language, connection type, whether you use the installed app, the website or campaign link that brought you, how fast pages and features load on your device, and errors the app runs into (the error, never your data).',
+                    'Problem reports: when you report a problem (for example "the bus didn\'t come"), the stop, route and bus it is about, what the app was showing, and the note you write.',
+                    'Support notes: our admins may keep short notes on your account when they help you (for example "called on 5 Nov, number changed"). They are deleted with your account.',
                     'Security logs: failed sign-ins, admin actions and blocked requests, with the IP address they came from.',
                 ],
             },
@@ -112,7 +116,7 @@ export const LEGAL_PAGES: Record<'about' | 'privacy' | 'terms', LegalPageContent
                 heading: 'Where it is kept, and for how long',
                 paragraphs: [
                     'Our database is stored by Supabase in {region}. Several of the services above are based in the United States, so your information may be processed there.',
-                    'Your account and saved data are kept until you delete your account. Visitor logs and security logs are deleted after 90 days.',
+                    'Your account and saved data are kept until you delete your account. Visitor logs, usage records and security logs are deleted after 90 days, and your usage records, problem reports and support notes are deleted with your account.',
                 ],
             },
             {

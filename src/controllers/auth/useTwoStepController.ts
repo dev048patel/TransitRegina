@@ -14,7 +14,7 @@ import { useAuth } from '../../models/context/AuthContext';
 type Mode = 'loading' | 'setup' | 'verify';
 
 export function useTwoStepController() {
-    const { isAdmin, roleLoaded, twoStepPassed } = useAuth();
+    const { isStaff: isAdmin, roleLoaded, twoStepPassed } = useAuth();   // view-only admins sign in with two steps too
     const navigate = useNavigate();
 
     const [mode, setMode] = useState<Mode>('loading');

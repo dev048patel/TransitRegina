@@ -7,7 +7,8 @@ import type { MarkerCharacterId } from '../data/markerCharacters';
 export interface BusSuggestionPanelProps {
     destination: { lat: number; lng: number; name: string };
     onClose: () => void;
-    onSelectRoute?: (option: TripOption) => void;
+    /** `rank`: which option the rider chose (0 = the top one), for the admin Usage page */
+    onSelectRoute?: (option: TripOption, rank?: number) => void;
     /** A planned-for-later trip to draw on the map (walks, buses, stops), or null when none is previewed */
     onPreviewTrip?: (trip: TripOption | null) => void;
     liveBuses?: BusPosition[];

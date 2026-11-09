@@ -1,6 +1,7 @@
 /**
  * PersonPage.tsx — Transit Regina  [VIEW — MVC]
- * One person on one page: account, features, recent visits, and what admins have done to the account.
+ * One person on one page: account, features, recent visits, what they did in the app (on request, and recorded),
+ * and what admins have done to the account.
  * Actions that can do damage sit in their own "Danger zone" at the bottom.
  */
 import { Link, useParams } from 'react-router-dom';
@@ -8,10 +9,11 @@ import { ArrowLeft } from 'lucide-react';
 import { usePersonController, verifyTwoStepCode } from '../../controllers/admin/usePersonController';
 import { useAuth } from '../../models/context/AuthContext';
 import { Badge, Card, ConfirmDialog, PageHeader, btn, when } from '../components/admin/ui';
+import RiderProfile from './RiderProfile';
 
 export default function PersonPage() {
     const { id = '' } = useParams();
-    const { user } = useAuth();
+    const { user, isAdmin } = useAuth();   // view-only admins see everything here but change nothing
     const c = usePersonController(id);
     const p = c.person?.profile;
     const isSelf = user?.id === id;
@@ -35,9 +37,9 @@ export default function PersonPage() {
                                 <div className="sm:col-span-2">
                                     <label htmlFor="person-name" className="text-slate-500">Name</label>
                                     <div className="flex gap-2 mt-1">
-                                        <input id="person-name" value={c.name} onChange={e => c.setName(e.target.value)} maxLength={80}
+                                        <input id="person-name" value={c.name} onChange={e => c.setName(e.target.value)} maxLength={80} readOnly={!isAdmin}
                                             className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#003DA5]/30" />
-                                        <button onClick={c.saveName} disabled={!c.name.trim() || c.name.trim() === (p.full_name ?? '')} className={btn.plain}>Save</button>
+                                        {isAdmin && <button onClick={c.saveName} disabled={!c.name.trim() || c.name.trim() === (p.full_name ?? '')} className={btn.plain}>Save</button>}
                                     </div>
                                 </div>
                             </dl>
@@ -48,7 +50,7 @@ export default function PersonPage() {
                                 {c.features.map(f => (
                                     <li key={f.key} className="flex items-center justify-between gap-4 px-5 py-3">
                                         <div><div className="text-sm font-medium text-slate-900">{f.label}</div><div className="text-xs text-slate-500">{f.description}</div></div>
-                                        <button role="switch" aria-checked={c.featureOn(f.key)} aria-label={f.label} onClick={() => c.toggleFeature(f.key)}
+                                        <button role="switch" aria-checked={c.featureOn(f.key)} aria-label={f.label} onClick={() => c.toggleFeature(f.key)} disabled={!isAdmin}
                                             className={'relative w-11 h-6 rounded-full transition flex-none ' + (c.featureOn(f.key) ? 'bg-emerald-500' : 'bg-slate-300')}>
                                             <span className={'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ' + (c.featureOn(f.key) ? 'translate-x-5' : '')} />
                                         </button>
@@ -66,17 +68,32 @@ export default function PersonPage() {
                                 </tbody>
                             </table>
                         </Card>
+
+                        <Card title="App activity" action={c.activity && <span className="text-xs text-slate-500">last 90 days</span>}>
+                            {!c.activity ? (
+                                <div className="px-5 py-5 text-sm text-slate-600">
+                                    <p>Everything this rider did in the app in the last 90 days: what they searched for, routes, stops and buses they looked at, trips, when they ride, texts sent to them, what they saved, and admin notes.</p>
+                                    <p className="text-xs text-slate-500 mt-1">This is personal data. Opening it is recorded in the activity log.</p>
+                                    {c.activityError && <p role="alert" className="text-xs text-red-700 mt-2">Could not load: {c.activityError}</p>}
+                                    <button onClick={c.showActivity} className={btn.plain + ' mt-3'}>Show activity</button>
+                                </div>
+                            ) : !c.activity.setup ? (
+                                <p className="px-5 py-5 text-sm text-amber-900">Usage tracking is not set up yet (docs/security/011_usage_analytics.sql).</p>
+                            ) : (
+                                <RiderProfile a={c.activity} isAdmin={isAdmin} noteDraft={c.noteDraft} setNoteDraft={c.setNoteDraft} addNote={c.addNote} deleteNote={c.deleteNote} />
+                            )}
+                        </Card>
                     </div>
 
                     <div className="space-y-4">
-                        <Card title="Admin actions on this account">
+                        <Card title="Admin actions on this account" action={<Link to={`/admin/activity?account=${p.id}`} className="text-xs font-semibold text-[#003DA5] hover:underline">Full log</Link>}>
                             <ul className="divide-y divide-slate-100">
                                 {c.person.history.map((h, i) => <li key={i} className="px-5 py-3 text-sm"><div className="text-slate-900 break-words">{h.message}</div><div className="text-xs text-slate-500 mt-0.5">{h.admin} · {when(h.created_at)}</div></li>)}
                                 {c.person.history.length === 0 && <li className="px-5 py-6 text-sm text-slate-500 text-center">Nothing yet.</li>}
                             </ul>
                         </Card>
 
-                        <section className="rounded-xl border border-red-200 bg-red-50/40">
+                        {isAdmin && <section className="rounded-xl border border-red-200 bg-red-50/40">
                             <h2 className="px-5 py-3 text-sm font-semibold text-red-800 border-b border-red-200">Danger zone</h2>
                             <div className="p-5 space-y-3">
                                 {isSelf ? <p className="text-sm text-slate-600">You can't change your own role or status. Ask another admin.</p> : <>
@@ -86,10 +103,13 @@ export default function PersonPage() {
                                     {p.role === 'admin'
                                         ? <button onClick={c.ask.removeAdmin} className={btn.dangerPlain + ' w-full justify-center'}>Remove admin rights</button>
                                         : <button onClick={c.ask.makeAdmin} className={btn.dangerPlain + ' w-full justify-center'}>Make admin</button>}
+                                    {p.role === 'viewer'
+                                        ? <button onClick={c.ask.removeViewer} className={btn.dangerPlain + ' w-full justify-center'}>Remove view-only admin access</button>
+                                        : p.role === 'user' && <button onClick={c.ask.makeViewer} className={btn.plain + ' w-full justify-center'}>Make view-only admin</button>}
                                     <button onClick={c.ask.remove} className={btn.danger + ' w-full justify-center'}>Delete account</button>
                                 </>}
                             </div>
-                        </section>
+                        </section>}
                     </div>
                 </div>
             )}

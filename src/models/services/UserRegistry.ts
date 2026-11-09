@@ -22,7 +22,7 @@
 
 import { supabase } from '../lib/supabase';
 import type { User } from '../admin/AdminTypes';
-import { apiPatch, apiDelete } from '../lib/apiClient';
+import { apiGet, apiPatch, apiDelete } from '../lib/apiClient';
 
 function formatDate(iso: string): string {
     return new Date(iso).toLocaleString('en-CA', {
@@ -31,14 +31,12 @@ function formatDate(iso: string): string {
     });
 }
 
-/** Fetches all registered users from the profiles table for the admin panel. */
+/** Everyone with an account, for the admin panel. Through the backend: it reads every page of accounts (a direct read
+ *  stops at 1,000) and view-only admins have no database access of their own. */
 export async function getAllUsers(): Promise<User[]> {
-    const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, role, account_status, created_at, last_active')
-        .order('created_at', { ascending: false });
-
-    if (error || !data) return [];
+    let data: { id: string; full_name: string | null; email: string | null; role: string | null; account_status: string; created_at: string; last_active: string | null }[];
+    try { data = await (await apiGet('/api/admin/people')).json(); }
+    catch { return []; }
 
     const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
 

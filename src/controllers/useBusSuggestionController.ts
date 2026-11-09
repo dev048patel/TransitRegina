@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RoutePlanningService } from '../models/services/RoutePlanningService';
 import { TripOption } from '../models/transit/RoutePlanning';
+import { trackTiming } from '../models/services/UsageTracker';
 
 const routePlanningService = new RoutePlanningService();
 
@@ -82,7 +83,9 @@ export function useBusSuggestionController({ destination, walkMultiplier = 1.0 }
             await new Promise(resolve => setTimeout(resolve, 0));
             if (!isCurrent()) return;
 
+            const planStart = performance.now();
             const candidates = routePlanningService.planTrips(origin, { lat: destLat, lng: destLng });
+            if (!background) trackTiming('plan_routes', planStart);
             if (candidates.length === 0) {
                 setResults([]);
                 setLastUpdated(new Date());

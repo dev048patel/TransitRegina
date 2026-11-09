@@ -20,11 +20,14 @@ import { fetchAgreedTermsVersion } from '../services/AuthService';
 import { recordLogout } from '../services/UserRegistry';
 import { formatMobile } from '../services/AuthService';
 import { apiPost } from '../lib/apiClient';
+import { track, trackNow } from '../services/UsageTracker';
 
 interface AuthContextValue {
     isAuthenticated: boolean;
     /** True only when the authenticated user has role = 'admin' in profiles. */
     isAdmin: boolean;
+    /** Admins and view-only admins ('viewer'): may open the admin panel. Only isAdmin may change anything there. */
+    isStaff: boolean;
     /** False until the role has been read from the database; admin pages wait for it. */
     roleLoaded: boolean;
     /** True when this login has passed two-step sign-in (the authenticator-app code). */
@@ -57,7 +60,7 @@ function tokenPassedTwoStep(token: string): boolean {
     catch { return false; }
 }
 
-async function fetchRole(userId: string): Promise<'user' | 'admin'> {
+async function fetchRole(userId: string): Promise<'user' | 'admin' | 'viewer'> {
     const { data } = await supabase
         .from('profiles')
         .select('role, account_status')
@@ -68,10 +71,10 @@ async function fetchRole(userId: string): Promise<'user' | 'admin'> {
     if (data?.account_status === 'suspended' || data?.account_status === 'deleted') {
         await supabase.auth.signOut();
     }
-    return (data?.role === 'admin') ? 'admin' : 'user';
+    return data?.role === 'admin' || data?.role === 'viewer' ? data.role : 'user';
 }
 
-function sessionToUser(session: Session, role: 'user' | 'admin', termsVersion: string | null): User {
+function sessionToUser(session: Session, role: 'user' | 'admin' | 'viewer', termsVersion: string | null): User {
     return {
         id: session.user.id,
         fullName: session.user.user_metadata?.full_name ?? session.user.email ?? 'User',
@@ -84,7 +87,7 @@ function sessionToUser(session: Session, role: 'user' | 'admin', termsVersion: s
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
-    const [role, setRole] = useState<'user' | 'admin'>('user');
+    const [role, setRole] = useState<'user' | 'admin' | 'viewer'>('user');
     const [isLoading, setIsLoading] = useState(true);
     // Which user the loaded role belongs to. Comparing it with the session means a role left over
     // from "nobody signed in" is never mistaken for the role of the person who just appeared.
@@ -177,6 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return 'This account has been deactivated.';
         }
 
+        track('signed_in', { method: /^\+?\d/.test(identifier.trim()) ? 'phone' : 'email' });
         return null;
     }, []);
 
@@ -186,6 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const logout = useCallback(async () => {
         const email = session?.user?.email ?? 'unknown';
+        await trackNow('signed_out');   // before the login ends, so it is recorded against the account
         setSignedOutOnPurpose(true);
         // This device only. (Supabase's default ends every session the account has, on every device.)
         await supabase.auth.signOut({ scope: 'local' });
@@ -207,6 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         <AuthContext.Provider value={{
             isAuthenticated: !!session,
             isAdmin: role === 'admin',
+            isStaff: role === 'admin' || role === 'viewer',
             roleLoaded: !session || roleFor === session.user.id,
             twoStepPassed: !!session && tokenPassedTwoStep(session.access_token),
             user,

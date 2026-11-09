@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import * as TransitController from '../TransitController';
 import { requireAuth } from '../middleware/requireAuth';
-import { requireAdmin } from '../middleware/requireAdmin';
+import { requireAdmin, requireStaff } from '../middleware/requireAdmin';
 import { rateLimit } from '../middleware/security';
 
 const router = Router();
@@ -70,7 +70,7 @@ router.get('/stop-predictions/:stopId', rateLimit('stop-predictions', 600), Tran
  route = GET /api/admin/routes
  Fetch all routes for the admin panel (includes hidden routes + status)
  */
-router.get('/admin/routes', requireAuth, requireAdmin, TransitController.getAdminRoutes);
+router.get('/admin/routes', requireAuth, requireStaff, TransitController.getAdminRoutes);
 
 /*
  route = PATCH /api/admin/routes/:id

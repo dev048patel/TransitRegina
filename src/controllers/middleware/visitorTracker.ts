@@ -1,15 +1,19 @@
 /*
-  Visitor Session Store (Supabase-backed)
-  Tracks unique visitors using a beacon + heartbeat model.
+  Visits (Supabase-backed): one row per visitor per Regina day, for "who is on the site now" and the Visitors page.
 
-  - Frontend sends POST /beacon once on page load → creates a session
-  - Frontend sends POST /heartbeat every 60s → keeps session alive
-  - Session expires after 30 min of no heartbeat → visitor is "inactive"
+  - Frontend sends POST /beacon on page load and POST /heartbeat every 60s → keeps today's row alive
+  - A row not seen for 30 min is "inactive"
 
-  Data persists in the `visitor_sessions` Supabase table.
+  A visitor is the account when signed in, otherwise an anonymous id that changes daily (see UsageEvents.visitorId).
+  It used to be address + browser kept forever: everyone on one Wi-Fi with the same phone was one visitor, a
+  returning rider never counted again, and one rider's visits could show on another rider's account.
+
+  Data persists in the `visitor_sessions` Supabase table; what riders do is in `usage_events`.
 */
 
 import { serviceDb } from '../../models/lib/serverDb';
+import { visitorId } from '../../models/services/UsageEvents';
+import { reginaDateKey } from '../../models/services/ReginaTime';
 
 // ─── UA Lookup Tables ──────────────────────────────
 const BROWSER_CODES: [string, string][] = [
@@ -73,11 +77,11 @@ export interface VisitorSession {
 // ─── Helpers ──────────────────────────────────────
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
-// One record per address and kind of device. Built from the parsed browser/system/device, not the
-// raw text the caller sends, so nobody can create unlimited records by changing that text.
-function createFingerprint(ip: string, userAgent: string): string {
+// One record per visitor per Regina day. Built from the parsed browser/system/device, not the raw text the caller
+// sends, so nobody can create unlimited records by changing that text.
+function createFingerprint(ip: string, userAgent: string, userId?: string): string {
     const { browser, os, device } = parseUserAgent(userAgent);
-    return `${ip}::${browser}/${os}/${device}`;
+    return `${visitorId(ip, `${browser}/${os}/${device}`, userId)}|${reginaDateKey(Date.now())}`;
 }
 
 /** Map a DB row to the VisitorSession shape the frontend expects. */
@@ -106,7 +110,7 @@ function rowToSession(row: any): VisitorSession {
   Creates a new session or reactivates an existing one.
 */
 export async function registerSession(ip: string, userAgent: string, page?: string, userId?: string): Promise<string> {
-    const sessionId = createFingerprint(ip, userAgent);
+    const sessionId = createFingerprint(ip, userAgent, userId);
     const { browser, os, device } = parseUserAgent(userAgent);
     const now = new Date().toISOString();
 
@@ -162,7 +166,7 @@ export async function registerSession(ip: string, userAgent: string, page?: stri
   Keeps the session alive and optionally updates the current page.
 */
 export async function heartbeat(ip: string, userAgent: string, page?: string, userId?: string): Promise<boolean> {
-    const sessionId = createFingerprint(ip, userAgent);
+    const sessionId = createFingerprint(ip, userAgent, userId);
 
     const { data: session } = await serviceDb()
         .from('visitor_sessions')
@@ -245,6 +249,13 @@ export async function getVisitorRecords(from?: string, to?: string): Promise<Vis
     });
 }
 
+/** A date range as Regina days ("2026-11-07" = that whole day in Regina); no dates = the last 24 hours */
+function rangeOf(from?: string, to?: string): { from: string; to: string } {
+    const day = (d: string, plusDays = 0) => new Date(new Date(`${d}T00:00:00-06:00`).getTime() + plusDays * 86_400_000).toISOString();
+    if (!from && !to) return { from: new Date(Date.now() - 86_400_000).toISOString(), to: new Date(Date.now() + 60_000).toISOString() };
+    return { from: from ? day(from) : new Date(0).toISOString(), to: to ? day(to, 1) : new Date(Date.now() + 60_000).toISOString() };
+}
+
 /*
   Returns aggregated analytics summary.
 */
@@ -277,36 +288,39 @@ export async function getAnalyticsSummary(from?: string, to?: string) {
         filteredQuery = filteredQuery.gte('last_seen', oneDayAgo);
     }
 
-    const { data: filtered } = await filteredQuery;
-    const sessions = (filtered ?? []).map(rowToSession);
+    // Breakdowns are counted in the database (script 011): reading rows through the API stops at 1,000
+    const range = rangeOf(from, to);
+    const exact = await serviceDb().rpc('visit_breakdown', { p_from: range.from, p_to: range.to });
+    const pages = await serviceDb().rpc('usage_top', { p_from: range.from, p_to: range.to, p_kind: 'page_view', p_key: 'path', p_limit: 10 });
+    const { count: visitsInRange } = await serviceDb().from('visitor_sessions').select('*', { count: 'exact', head: true }).gte('first_seen', range.from).lt('first_seen', range.to);
+    const { data: viewDays } = await serviceDb().rpc('usage_days', { p_from: range.from, p_to: range.to });
 
-    // Browser breakdown
-    const browsers: Record<string, number> = {};
-    sessions.forEach(s => { browsers[s.browser] = (browsers[s.browser] || 0) + 1; });
-
-    // OS breakdown
-    const operatingSystems: Record<string, number> = {};
-    sessions.forEach(s => { operatingSystems[s.os] = (operatingSystems[s.os] || 0) + 1; });
-
-    // Device breakdown
-    const devices: Record<string, number> = {};
-    sessions.forEach(s => { devices[s.device] = (devices[s.device] || 0) + 1; });
-
-    // Top pages
-    const paths: Record<string, number> = {};
-    sessions.forEach(s => {
-        s.pagesVisited.forEach(p => { paths[p] = (paths[p] || 0) + 1; });
-    });
-    const topPages = Object.entries(paths)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([path, count]) => ({ path, count }));
+    let browsers: Record<string, number> = {}, operatingSystems: Record<string, number> = {}, devices: Record<string, number> = {};
+    let topPages: { path: string; count: number }[] = [], totalPageViews = 0, visitorsInRange = visitsInRange ?? 0;
+    if (!exact.error && exact.data) {
+        for (const r of exact.data as { field: string; value: string; visits: number }[]) {
+            const into = r.field === 'browser' ? browsers : r.field === 'os' ? operatingSystems : devices;
+            into[r.value] = Number(r.visits);
+        }
+        topPages = ((pages.data ?? []) as { value: string; events: number }[]).map(p => ({ path: p.value, count: Number(p.events) }));
+        totalPageViews = ((viewDays ?? []) as { page_views: number }[]).reduce((sum, d) => sum + Number(d.page_views), 0);
+    } else {
+        // Script 011 not run yet: the old way, over at most the 1,000 rows the API returns
+        const { data: filtered } = await filteredQuery;
+        const sessions = (filtered ?? []).map(rowToSession);
+        sessions.forEach(s => { browsers[s.browser] = (browsers[s.browser] || 0) + 1; operatingSystems[s.os] = (operatingSystems[s.os] || 0) + 1; devices[s.device] = (devices[s.device] || 0) + 1; });
+        const paths: Record<string, number> = {};
+        sessions.forEach(s => s.pagesVisited.forEach(p => { paths[p] = (paths[p] || 0) + 1; }));
+        topPages = Object.entries(paths).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([path, count]) => ({ path, count }));
+        totalPageViews = sessions.reduce((sum, s) => sum + s.pageViews, 0);
+        visitorsInRange = sessions.length;
+    }
 
     return {
         totalVisitors: totalVisitors ?? 0,
-        visitorsInRange: sessions.length,
+        visitorsInRange,
         activeNow: activeNow ?? 0,
-        totalPageViews: sessions.reduce((sum, s) => sum + s.pageViews, 0),
+        totalPageViews,
         browsers: Object.entries(browsers).map(([name, count]) => ({ name, count })),
         operatingSystems: Object.entries(operatingSystems).map(([name, count]) => ({ name, count })),
         devices: Object.entries(devices).map(([name, count]) => ({ name, count })),

@@ -142,4 +142,5 @@ export const EVENT_LABEL: Record<string, string> = {
     admin_two_step_missing: 'Admin login without a two-step code', rate_limited: 'Too many requests',
     validation_failed: 'Malformed request', cors_blocked: 'Request from an unknown website', webhook_rejected: 'Forged text-message callback',
     burst: 'Repeated probing', dependency_down: 'Service down', dependency_recovered: 'Service recovered', server_error: 'Server error',
+    note_added: 'Note added', note_deleted: 'Note deleted', reports_handled: 'Rider reports handled',
 };

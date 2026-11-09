@@ -27,7 +27,7 @@ export interface User {
     fullName: string;
     email: string;
     mobile?: string;
-    role: 'user' | 'admin';
+    role: 'user' | 'admin' | 'viewer';
     /** Version of the Terms and Privacy policy this account last agreed to, if any */
     termsVersion?: string;
 }

@@ -1,6 +1,7 @@
 /* Navbar controller — handles place selection geocoding and analytics tracking for the search bar */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { usePlacesAutocomplete } from './usePlacesAutocomplete';
+import { track } from '../models/services/UsageTracker';
 
 interface PlaceResult {
     id: string;
@@ -37,7 +38,7 @@ export function useNavbarController(onPlaceSelect?: (place: PlaceResult) => void
         onClearPlace?.();
     }, [setValue, clearSuggestions, onClearPlace]);
 
-    // Geocode selected place, notify parent, and track analytics event
+    // Geocode selected place, notify parent, and record the search for the admin Usage page
     const handleSelect = useCallback(async (description: string, placeId: string) => {
         setValue(description, false);
         clearSuggestions();
@@ -50,17 +51,21 @@ export function useNavbarController(onPlaceSelect?: (place: PlaceResult) => void
                 onPlaceSelect({ id: placeId, displayName: description, location: { lat, lng } });
             }
 
-            // Track "places" event for admin dashboard analytics
-            const baseUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
-            fetch(`${baseUrl}/api/features/track`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type: 'places' }),
-            }).catch(() => {}); // silent fail — analytics should never break the app
+            // For the admin Usage page: the place picked (never the letters typed) and its area
+            track('place_searched', { place: description.split(',')[0], lat, lng });
         } catch (error) {
             console.error('Error selecting place:', error);
         }
     }, [onPlaceSelect, setValue, clearSuggestions, getLocation]);
+
+    // A search with no matches: only its length is recorded (what was typed can be an address)
+    const noResultsFor = useRef('');
+    useEffect(() => {
+        if (status === 'ZERO_RESULTS' && value.trim().length >= 3 && noResultsFor.current !== value) {
+            noResultsFor.current = value;
+            track('search_no_results', { chars: value.trim().length });
+        }
+    }, [status, value]);
 
     // Show dropdown when input is focused and there are results
     const handleFocus = useCallback(() => {

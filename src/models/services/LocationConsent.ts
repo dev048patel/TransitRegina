@@ -5,6 +5,7 @@
    this device; "Not now" lasts only until the map is next opened, so every visit to the map asks. */
 
 import { problemFromError, type LocationProblem } from './LocationHelp';
+import { track } from './UsageTracker';
 
 export type LocationChoice = 'allowed' | 'declined' | null;
 
@@ -67,6 +68,7 @@ export const getLocationAttempt = () => attempt;
 export function setLocationProblem(next: LocationProblem | null): void {
     if (next === problem) return;
     problem = next;
+    if (next) track('location_problem', { problem: next });   // here, once per change (several components listen)
     notify();
 }
 export function onLocationProblem(listener: () => void): () => void {

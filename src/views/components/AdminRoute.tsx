@@ -24,7 +24,7 @@ interface AdminRouteProps {
 }
 
 export default function AdminRoute({ children }: AdminRouteProps) {
-    const { isAuthenticated, isAdmin, isLoading, roleLoaded, twoStepPassed, signedOutOnPurpose } = useAuth();
+    const { isAuthenticated, isStaff, isLoading, roleLoaded, twoStepPassed, signedOutOnPurpose } = useAuth();
     const location = useLocation();
     const terms = useTermsAcceptance();
 
@@ -42,7 +42,7 @@ export default function AdminRoute({ children }: AdminRouteProps) {
         return <Navigate to="/login" state={signedOutOnPurpose && !isAuthenticated ? undefined : { from: location }} replace />;
     }
 
-    if (!isAdmin) {
+    if (!isStaff) {   // admins and view-only admins
         return <Navigate to="/map" replace />;
     }
 

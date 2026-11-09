@@ -12,6 +12,7 @@ import { useAuth } from '../../models/context/AuthContext';
 import { useFeatureAccess } from '../../models/context/FeatureAccessContext';
 import { formatMobile, deleteAccount, changePassword } from '../../models/services/AuthService';
 import { SmsService } from '../../models/services/SmsService';
+import { track } from '../../models/services/UsageTracker';
 
 /* ── Types ──────────────────────────────────────────────────────── */
 export interface ProfileData {
@@ -269,6 +270,8 @@ export function useProfileController() {
                 })
                 .eq('id', user.id);
             if (profileError) throw profileError;
+            const emailChanged = !!editEmail.trim() && editEmail.trim() !== user.email;
+            track('profile_updated', { fields: [editName.trim() !== (profile?.full_name ?? '') && 'name', numberChanged && 'phone', emailChanged && 'email'].filter(Boolean).join(',') || 'none' });
 
             // Reflect changes in local state immediately
             setProfile(prev => prev

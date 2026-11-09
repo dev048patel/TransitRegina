@@ -12,6 +12,7 @@ import { createApp } from './apiApp';
 import { serviceDb } from './models/lib/serverDb';
 import { TwilioService } from './models/services/TwilioService';
 import { HealthService } from './models/services/HealthService';
+import { checkUsage, sendWeeklyDigest } from './models/services/UsageAlerts';
 import { SecurityEventService } from './models/services/SecurityEventService';
 import { SmsOutageService } from './models/services/SmsOutageService';
 import { smsRevokedIds } from './models/services/SmsAccessService';
@@ -147,6 +148,10 @@ schedule('* * * * *', async () => {
 // Every 5 minutes: is the database reachable, is the bus feed answering? Admins are emailed
 // when one stops for two checks in a row, and the Security page shows the current state.
 schedule('*/5 * * * *', () => { HealthService.run().catch(err => console.error('[Health] Check failed:', err)); });
+// Every 5 minutes: did usage collapse, or are text messages failing? Admins are emailed (at most every 3 hours per alert).
+schedule('*/5 * * * *', () => { checkUsage().catch(err => console.error('[Alerts] Usage check failed:', err)); });
+// Monday 8 am Regina (14:00 UTC; Saskatchewan has no daylight saving): last week in numbers, emailed to the admins
+schedule('0 14 * * 1', () => { sendWeeklyDigest().catch(err => console.error('[Digest] Failed:', err)); });
 if (RUN_JOBS) HealthService.run().catch(() => { });
 
 // Every minute: are SMS alerts down today? The SMS service can't announce its own outage, so this API
@@ -161,8 +166,10 @@ schedule('20 3 * * *', async () => {
     if (error) console.error('[Retention] Visitor cleanup failed:', error.message);
     const { error: evErr } = await serviceDb().from('security_events').delete().lt('created_at', cutoff);
     if (evErr) console.error('[Retention] Event cleanup failed:', evErr.message);
-    const { error: usageErr } = await serviceDb().from('feature_events').delete().lt('created_at', cutoff);
+    const { error: usageErr } = await serviceDb().from('usage_events').delete().lt('at', cutoff);
     if (usageErr) console.error('[Retention] Usage cleanup failed:', usageErr.message);
+    // The old place/directions counter (replaced by usage_events): empties itself as its rows pass 90 days
+    await serviceDb().from('feature_events').delete().lt('created_at', cutoff);
 });
 
 // A crash should reach the admins, not just the log

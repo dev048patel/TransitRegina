@@ -11,8 +11,13 @@ import StatusBadge from '../components/admin/StatusBadge';
 import { Edit2, Eye, EyeOff, Search } from 'lucide-react';
 import { useRouteManagerController } from '../../controllers/admin/useRouteManagerController';
 import { Route } from '../../models/admin/AdminTypes';
+import { useAuth } from '../../models/context/AuthContext';
+import { Navigate } from 'react-router-dom';
 
 export default function RouteManager() {
+    // Only for changing settings: view-only admins go back to the admin home
+    const { isAdmin } = useAuth();
+    if (!isAdmin) return <Navigate to="/admin" replace />;
     const {
         routes, totalRoutes, activeRoutes, loading,
         searchTerm, setSearchTerm,

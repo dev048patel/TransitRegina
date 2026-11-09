@@ -4,6 +4,7 @@ import { TripOption } from '../../../models/transit/RoutePlanning';
 import transitColors from '../../../models/data/transitColors';
 import { BusSuggestionPanelProps } from '../../../models/components/BusSuggestionPanelProps';
 import { useBusSuggestionController } from '../../../controllers/useBusSuggestionController';
+import { useUsageTracking } from '../../../controllers/hooks/useUsageTracking';
 import { useArriveByController } from '../../../controllers/useArriveByController';
 import ArriveByPlanCard from './ArriveByPlanCard';
 import { STOP_DIRECTION_LABEL } from '../../../models/transit/StopDirection';
@@ -32,6 +33,17 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
     const [arriveByTime, setArriveByTime] = React.useState('');
     const planning = arriveByMode && arriveByTime !== '';
     const arriveBy = useArriveByController({ origin, destination, time: planning ? arriveByTime : '' });
+
+    // For the admin Usage page: the options a rider was shown, once per destination
+    const { track } = useUsageTracking();
+    const shownFor = React.useRef('');
+    React.useEffect(() => {
+        if (!results.length || shownFor.current === destination.name) return;
+        shownFor.current = destination.name;
+        const best = results[0];
+        track('suggestions_shown', { place: destination.name.split(',')[0], options: results.length,
+            best_route: best.segments.map(seg => seg.routeNum).join('>'), best_minutes: Math.round(best.totalTimeWithWait ?? best.totalTime) });
+    }, [results, destination.name, track]);
 
     // The previewed trip goes to the map; none once the panel closes
     const previewTrip = arriveBy.previewTrip;
@@ -70,7 +82,7 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
             {/* Arrive-by time row */}
             <div style={{ padding: '5px 12px', borderBottom: '1px solid var(--t-border-soft)', display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: arriveByMode ? 'var(--t-accent-soft)' : 'var(--t-surface)' }}>
                 <button
-                    onClick={() => { setArriveByMode(m => !m); if (arriveByMode) setArriveByTime(''); }}
+                    onClick={() => { if (!arriveByMode) track('plan_later'); setArriveByMode(m => !m); if (arriveByMode) setArriveByTime(''); }}
                     style={{
                         padding: '3px 9px', borderRadius: '8px', border: 'none', fontSize: '12px', fontWeight: '600',
                         backgroundColor: arriveByMode ? 'var(--t-accent)' : 'var(--t-chip)',
@@ -175,7 +187,7 @@ export default function BusSuggestionPanel({ destination, onClose, onSelectRoute
                         index={i}
                         weather={weather}
                         character={character}
-                        onStart={() => onSelectRoute?.(option)}
+                        onStart={() => onSelectRoute?.(option, i)}
                     />
                 ))}
             </div>
@@ -196,6 +208,7 @@ function RouteCard({ option, index, weather, character, onStart }: {
 }) {
     // On phones every option starts collapsed so several fit on screen; desktop opens the best one
     const [expanded, setExpanded] = React.useState(() => index === 0 && !window.matchMedia('(max-width: 640px)').matches);
+    const { track } = useUsageTracking();
     const face = character === 'default' ? null : MARKER_CHARACTERS.find(c => c.id === character);
     const [expandedStops, setExpandedStops] = React.useState<Set<number>>(new Set());
     const [detouredRoutes, setDetouredRoutes] = React.useState<Set<string>>(new Set());
@@ -505,7 +518,7 @@ function RouteCard({ option, index, weather, character, onStart }: {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: expanded ? '10px' : '2px' }}>
                 <button
                     type="button"
-                    onClick={() => setExpanded(e => !e)}
+                    onClick={() => { if (!expanded) track('option_expanded', { rank: index }); setExpanded(e => !e); }}
                     aria-expanded={expanded}
                     style={{
                         display: 'inline-flex', alignItems: 'center', gap: '4px', height: '32px', padding: '0 6px',

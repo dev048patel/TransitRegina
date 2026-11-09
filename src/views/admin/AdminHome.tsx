@@ -48,13 +48,14 @@ export default function AdminHome() {
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Today (Regina time)</h2>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <Stat label="Visitors" value={data?.today.visitors ?? '–'} />
-                <Stat label="Place searches" value={data?.today.places ?? '–'} />
-                <Stat label="Trip plans" value={data?.today.directions ?? '–'} />
+                <Stat label="Place searches" value={data?.today.searches ?? '–'} />
+                <Stat label="Trips started" value={data?.today.trips ?? '–'} />
                 <Stat label="New sign-ups" value={data?.today.signups ?? '–'} sub={data ? `${data.totals.signupsWeek} this week · ${data.totals.users} accounts in total` : undefined} />
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                <Card title="Last 7 days" className="xl:col-span-2">
+                <Card title="Last 7 days" className="xl:col-span-2" action={<Link to="/admin/insights" className="text-xs font-semibold text-[#003DA5] hover:underline">Full usage</Link>}>
+                    {data && !data.usageReady && <p className="mx-4 mt-3 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Run docs/security/011_usage_analytics.sql to fill this chart.</p>}
                     <div className="h-72 p-4">
                         <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart data={(data?.trend ?? []).map(t => ({ ...t, label: weekday(t.day) }))}>
@@ -62,10 +63,10 @@ export default function AdminHome() {
                                 <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
                                 <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={12} width={32} />
                                 <Tooltip />
-                                <Legend />
-                                <Bar dataKey="places" name="Place searches" stackId="s" fill="#1a73e8" radius={[0, 0, 0, 0]} />
-                                <Bar dataKey="directions" name="Trip plans" stackId="s" fill="#7aa9f0" radius={[4, 4, 0, 0]} />
-                                <Line dataKey="visitors" name="New visitors" stroke="#e37400" strokeWidth={2} dot={{ r: 3 }} />
+                                <Legend formatter={v => <span style={{ color: '#334155' }}>{v}</span>} />
+                                <Bar dataKey="searches" name="Place searches" fill="#1a73e8" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="trips" name="Trips started" fill="#e37400" radius={[4, 4, 0, 0]} />
+                                <Line dataKey="visitors" name="Visitors" stroke="#334155" strokeWidth={2} dot={{ r: 3 }} />
                             </ComposedChart>
                         </ResponsiveContainer>
                     </div>

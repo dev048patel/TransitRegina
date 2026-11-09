@@ -7,6 +7,7 @@ import transitColors from '../../../models/data/transitColors';
 import { TrackingPanelProps } from '../../../models/components/TrackingPanelProps';
 import { formatTime, calculateArrivalTime, calculateBoardTime } from '../../../models/services/TimeService';
 import { useTripTextsController } from '../../../controllers/useTripTextsController';
+import ReportProblem from './ReportProblem';
 
 // Step dot colours carry meaning and are the same in every theme
 const BLUE = '#4285F4', GREY = '#5f6368', RED = '#ea4335', ORANGE = '#e37400', GREEN = '#34a853';
@@ -174,6 +175,11 @@ export default function TrackingPanel({ tripOption, walks, onStopTracking, onBac
                     {steps}
                 </div>
             )}
+
+            {/* "The bus didn't come": to the admin Reports inbox, with this trip's first bus and what the app showed */}
+            <div style={{ padding: '0 14px' }}>
+                <ReportProblem context={{ stop: first.fromStopId, route: tripOption.segments.map(seg => seg.routeNum).join('>'), bus: first.busId ? String(first.busId) : undefined, shown: busIn || undefined }} />
+            </div>
 
             {/* Text me this trip (admins only while it is being tried out; signed-out riders are asked to sign in) */}
             {texts.offered && texts.state !== 'declined' && (

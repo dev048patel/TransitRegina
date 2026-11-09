@@ -19,6 +19,22 @@ export function requireFreshTwoStep(req: Request, res: Response, next: NextFunct
 }
 
 /**
+ * For pages any admin-panel staff may see, including view-only admins ('viewer'). The same two-step rules as
+ * requireAdmin apply. Anything that changes something must also use requireAdmin. Use after requireAuth.
+ */
+export function requireStaff(req: Request, res: Response, next: NextFunction): void {
+    if (req.user?.role === 'viewer') {
+        if (!req.user.twoStep || Date.now() / 1000 - req.user.twoStepAt > TWO_STEP_MAX_SECONDS) {
+            res.status(403).json({ error: 'Two-step sign-in required', code: 'two_step_required' });
+            return;
+        }
+        next();
+        return;
+    }
+    requireAdmin(req, res, next);
+}
+
+/**
  * Must be used after requireAuth (relies on req.user being set, including its role).
  * Returns 403 if the user is signed in but not an admin, or is an admin who has not
  * completed two-step sign-in, and records the attempt.

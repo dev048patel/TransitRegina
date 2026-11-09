@@ -19,6 +19,7 @@ import { ActiveDetour } from '../models/transit/Detour';
 import { RoutePolylineService } from '../models/services/RoutePolylineService';
 import type { WeatherSnapshot } from '../models/services/WeatherService';
 import { PlacesService } from '../models/services/PlacesService';
+import { track, trackTiming } from '../models/services/UsageTracker';
 
 export const useMapController = (): MapControllerOutput => {
   // 1. Fetch Configuration from Model and initialize state variables
@@ -29,6 +30,9 @@ export const useMapController = (): MapControllerOutput => {
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
     libraries,
   });
+  // For the admin Usage page: how long until the map can be used (from the start of the page load), and the first live-bus answer
+  const liveTimed = useRef(false);
+  useEffect(() => { if (isLoaded) trackTiming('map_load', 0); }, [isLoaded]);
 
   // using useState so it remembers the value even after re-renders so it has 2 values : current value and a function to update it
   const [allStops, setAllStops] = useState<Stop[]>([]); // here storing all stops in form of array : [allStops, setAllStops] : [current value, function to update it]
@@ -148,6 +152,7 @@ export const useMapController = (): MapControllerOutput => {
       try {
         const baseUrl = import.meta.env.VITE_SERVER_URL;
         const fetchUrl = `${baseUrl}/api/live?_=${Date.now()}`;
+        const pollStarted = performance.now();
 
         // Use timestamp to prevent browser caching
         const response = await fetch(fetchUrl);
@@ -176,6 +181,7 @@ export const useMapController = (): MapControllerOutput => {
 
           // Update React state from the cache
           setLiveBuses(Array.from(cache.values()).map(e => e.bus));
+          if (!liveTimed.current) { liveTimed.current = true; trackTiming('live_feed', pollStarted); }
           failedPolls.current = 0;
           setLiveDown(false);
         } else {
@@ -261,6 +267,7 @@ export const useMapController = (): MapControllerOutput => {
     // A newer tap has superseded this one
     if (request !== pickRequestRef.current) return false;
     setSelectedPlaceMarker({ location, name: name || (placeId ? 'Selected place' : 'Dropped pin') });
+    track('place_tapped', { place: (name || (placeId ? 'Selected place' : 'Dropped pin')).split(',')[0], lat: location.lat, lng: location.lng });
     return true;
   }, []);
 

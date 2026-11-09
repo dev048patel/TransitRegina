@@ -8,6 +8,7 @@ import { useNavbarController } from '../controllers/useNavbarController';
 import { useSavedDestinationsController } from '../controllers/useSavedDestinationsController';
 import { useTripScheduleController } from '../controllers/useTripScheduleController';
 import { useWeeklyPlannerController } from '../controllers/useWeeklyPlannerController';
+import { useUsageTracking } from '../controllers/hooks/useUsageTracking';
 import SavedLocationsPanel from './SavedLocationsPanel';
 import TripSchedulePanel from './TripSchedulePanel';
 import WeeklyPlannerPanel from './WeeklyPlannerPanel';
@@ -24,7 +25,7 @@ interface NavbarProps {
 
 // Renders the top navbar with search, route filter, admin link, profile, and saved locations
 export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRoute, onRouteSelect }: NavbarProps) {
-    const { isAdmin } = useAuth();
+    const { isStaff: isAdmin } = useAuth();   // the admin link shows for view-only admins too
     const { hasFeature } = useFeatureAccess();
     const { ready, value, status, data, showResults, handleInput, handleClear, handleSelect, handleFocus } = useNavbarController(onPlaceSelect, onClearPlace);
     const saved = useSavedDestinationsController();
@@ -32,9 +33,10 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
     const weplan = useWeeklyPlannerController();
 
     // Mutual panel exclusion helpers
-    const openSaved = () => { tplan.handleClose(); weplan.handleClose(); saved.handleOpen(); };
-    const openTplan = () => { saved.handleClose(); weplan.handleClose(); tplan.handleOpen(); };
-    const openWeplan = () => { saved.handleClose(); tplan.handleClose(); weplan.handleOpen(); };
+    const { track } = useUsageTracking();
+    const openSaved = () => { track('menu_opened', { panel: 'saved' }); tplan.handleClose(); weplan.handleClose(); saved.handleOpen(); };
+    const openTplan = () => { track('menu_opened', { panel: 'trip_planner' }); saved.handleClose(); weplan.handleClose(); tplan.handleOpen(); };
+    const openWeplan = () => { track('menu_opened', { panel: 'weekly' }); saved.handleClose(); tplan.handleClose(); weplan.handleOpen(); };
 
     // The desktop planner icons are divs: give them a button's role, focus and Enter/Space so keyboards can open them
     const asButton = (onActivate: () => void) => ({

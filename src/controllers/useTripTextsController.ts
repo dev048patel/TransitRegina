@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../models/context/AuthContext';
 import { SmsService } from '../models/services/SmsService';
+import { track } from '../models/services/UsageTracker';
 import type { TripOption } from '../models/transit/RoutePlanning';
 
 export type TripTextsState = 'ask' | 'starting' | 'on' | 'declined';
@@ -27,10 +28,12 @@ export function useTripTextsController(trip: TripOption, destinationName?: strin
     const start = useCallback(async () => {
         // Signed out: /profile sends them through sign-in, then they turn text alerts on there
         if (!isAuthenticated) {
+            track('trip_texts', { action: 'signin_needed' });
             setError('Sign in and turn on text alerts on your profile to get trip texts.');
             setFixOnProfile(true);
             return;
         }
+        track('trip_texts', { action: 'asked' });
         setState('starting');
         setError('');
         setFixOnProfile(false);
@@ -60,5 +63,5 @@ export function useTripTextsController(trip: TripOption, destinationName?: strin
         catch { /* the trip ends anyway; its texts stop being useful once the buses have gone */ }
     }, []);
 
-    return { offered: isAdmin || !isAuthenticated, state, error, fixOnProfile, info, start, decline: () => setState('declined'), stop };
+    return { offered: isAdmin || !isAuthenticated, state, error, fixOnProfile, info, start, decline: () => { track('trip_texts', { action: 'declined' }); setState('declined'); }, stop };
 }

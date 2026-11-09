@@ -4,6 +4,8 @@
 import React, { useState } from 'react';
 import { StopDetailPanelProps } from '../../../models/components/StopDetailPanelProps';
 import { useStopDetailController, RouteGroup } from '../../../controllers/useStopDetailController';
+import { useUsageTracking } from '../../../controllers/hooks/useUsageTracking';
+import ReportProblem from './ReportProblem';
 import { directionOfStop, STOP_DIRECTION_ARROW, STOP_DIRECTION_LABEL } from '../../../models/transit/StopDirection';
 
 /** Departures shown per route before "more" */
@@ -12,6 +14,7 @@ const SHOWN = 3;
 export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps) {
     const { routeGroups, servingRoutes, loading, error, lastRefreshed, handleRefresh } = useStopDetailController(stop.STOP_ID);
     const direction = directionOfStop(stop);
+    const { track } = useUsageTracking();
 
     return (
         <div className="stop-detail-panel map-card t-panel" style={panelStyle}>
@@ -45,7 +48,7 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
                         )}
                     </div>
                 </div>
-                <button onClick={handleRefresh} disabled={loading} title={lastRefreshed ? `Updated ${formatTimeAgo(lastRefreshed)} · refresh` : 'Refresh departures'} aria-label="Refresh departures"
+                <button onClick={() => { track('stop_refresh', { stop: stop.STOP_ID }); handleRefresh(); }} disabled={loading} title={lastRefreshed ? `Updated ${formatTimeAgo(lastRefreshed)} · refresh` : 'Refresh departures'} aria-label="Refresh departures"
                     style={{ ...iconBtnStyle, border: '1px solid var(--t-border)', opacity: loading ? 0.5 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
                     <span style={{ display: 'inline-block', animation: loading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
                 </button>
@@ -74,8 +77,10 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
                 )}
 
                 {!loading && routeGroups.map((group, i) => (
-                    <RouteRow key={group.routeId} group={group} isNearest={i === 0 && group.hasLiveData} />
+                    <RouteRow key={group.routeId} group={group} isNearest={i === 0 && group.hasLiveData} onMore={() => track('stop_more', { stop: stop.STOP_ID })} />
                 ))}
+                {/* "The bus didn't come": to the admin Reports inbox, with this stop and what the board showed */}
+                <ReportProblem context={{ stop: stop.STOP_ID, shown: routeGroups[0]?.predictions[0] ? `Route ${routeGroups[0].routeId} in ${routeGroups[0].predictions[0].minutesAway} min` : undefined }} />
             </div>
 
             <style>{`
@@ -85,7 +90,7 @@ export default function StopDetailPanel({ stop, onClose }: StopDetailPanelProps)
     );
 }
 
-function RouteRow({ group, isNearest }: { group: RouteGroup; isNearest: boolean }) {
+function RouteRow({ group, isNearest, onMore }: { group: RouteGroup; isNearest: boolean; onMore: () => void }) {
     const [showAll, setShowAll] = useState(false);
     const shown = showAll ? group.predictions : group.predictions.slice(0, SHOWN);
     const hidden = group.predictions.length - shown.length;
@@ -134,7 +139,7 @@ function RouteRow({ group, isNearest }: { group: RouteGroup; isNearest: boolean 
             })}
 
             {(hidden > 0 || showAll) && group.predictions.length > SHOWN && (
-                <button onClick={() => setShowAll(v => !v)} style={{ border: 'none', background: 'none', padding: '1px 6px', fontSize: '11px', fontWeight: 600, color: 'var(--t-primary)', cursor: 'pointer' }}>
+                <button onClick={() => { if (!showAll) onMore(); setShowAll(v => !v); }} style={{ border: 'none', background: 'none', padding: '1px 6px', fontSize: '11px', fontWeight: 600, color: 'var(--t-primary)', cursor: 'pointer' }}>
                     {showAll ? 'Show less' : `${hidden} more`}
                 </button>
             )}

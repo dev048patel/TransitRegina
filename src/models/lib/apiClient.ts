@@ -7,11 +7,12 @@
  */
 
 import { supabase } from './supabase';
+import { trackApiError } from '../services/UsageTracker';
 
 const BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
 /** The only endpoints that work without a login; every other one answers 401 to a signed-out caller. */
-const PUBLIC_PATHS = ['/api/analytics/beacon', '/api/analytics/heartbeat', '/api/auth/login-mobile', '/api/plan/arrive-by', '/api/walk'];
+const PUBLIC_PATHS = ['/api/analytics/beacon', '/api/analytics/heartbeat', '/api/analytics/report', '/api/auth/login-mobile', '/api/plan/arrive-by', '/api/walk'];
 
 async function authHeaders(path: string): Promise<Record<string, string>> {
     const { data: { session } } = await supabase.auth.getSession();
@@ -24,6 +25,18 @@ async function authHeaders(path: string): Promise<Record<string, string>> {
         throw Object.assign(new Error('Sign in required'), { status: 401 });
     }
     return headers;
+}
+
+/** fetch, and note for the admin Usage page when our backend answers with a server error or not at all */
+async function call(path: string, init: RequestInit): Promise<Response> {
+    try {
+        const res = await fetch(`${BASE_URL}${path}`, init);
+        if (res.status >= 500) trackApiError(path, res.status);
+        return res;
+    } catch (e) {
+        trackApiError(path, 0);   // no answer: offline, blocked, or the server is down
+        throw e;
+    }
 }
 
 async function checkOk(res: Response, headers: Record<string, string>): Promise<Response> {
@@ -42,7 +55,7 @@ async function checkOk(res: Response, headers: Record<string, string>): Promise<
 
 export async function apiGet(path: string): Promise<Response> {
     const headers = await authHeaders(path);
-    return checkOk(await fetch(`${BASE_URL}${path}`, {
+    return checkOk(await call(path, {
         method: 'GET',
         headers,
     }), headers);
@@ -50,7 +63,7 @@ export async function apiGet(path: string): Promise<Response> {
 
 export async function apiPost(path: string, body?: unknown): Promise<Response> {
     const headers = await authHeaders(path);
-    return checkOk(await fetch(`${BASE_URL}${path}`, {
+    return checkOk(await call(path, {
         method: 'POST',
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -59,7 +72,7 @@ export async function apiPost(path: string, body?: unknown): Promise<Response> {
 
 export async function apiPatch(path: string, body?: unknown): Promise<Response> {
     const headers = await authHeaders(path);
-    return checkOk(await fetch(`${BASE_URL}${path}`, {
+    return checkOk(await call(path, {
         method: 'PATCH',
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -68,7 +81,7 @@ export async function apiPatch(path: string, body?: unknown): Promise<Response> 
 
 export async function apiDelete(path: string, body?: unknown): Promise<Response> {
     const headers = await authHeaders(path);
-    return checkOk(await fetch(`${BASE_URL}${path}`, {
+    return checkOk(await call(path, {
         method: 'DELETE',
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,

@@ -3,6 +3,7 @@ import { usePlacesAutocomplete } from './usePlacesAutocomplete';
 import { useAuth } from '../models/context/AuthContext';
 import { SavedDestination } from '../models/transit/SavedDestination';
 import { SavedDestinationsService } from '../models/services/SavedDestinationsService';
+import { track } from '../models/services/UsageTracker';
 
 export type PanelMode = 'list' | 'add';
 
@@ -124,6 +125,7 @@ export function useSavedDestinationsController() {
                 place_id: selectedPlace.place_id,
             });
             setDestinations(prev => [newDest, ...prev]);
+            track('place_saved');
             switchToList();
         } catch (err: any) {
             setAddError(err?.message || 'Failed to save location. Please try again.');

@@ -7,7 +7,6 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors'; // Cross Origin Resource Sharing : Allow cross-origin requests (Frontend -> Backend)
 import transitRoutes from './controllers/routes/transit.routes';
 import analyticsRoutes from './controllers/routes/analytics.routes';
-import featureRoutes from './controllers/routes/feature.routes';
 import pushRoutes from './controllers/routes/push.routes';
 import adminRoutes from './controllers/routes/admin.routes';
 import smsRoutes from './controllers/routes/sms.routes';
@@ -60,7 +59,6 @@ export function createApp() {
     // Mount Routes
     app.use('/api', transitRoutes);
     app.use('/api/analytics', analyticsRoutes);
-    app.use('/api/features', featureRoutes);
     app.use('/api/push', pushRoutes);
     app.use('/api/admin', adminRoutes);
     app.use('/api/sms', smsRoutes);

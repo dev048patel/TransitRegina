@@ -5,6 +5,7 @@
  * missing); user_preferences.marker_character syncs the choice across devices.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { track } from '../models/services/UsageTracker';
 import { supabase } from '../models/lib/supabase';
 import { useAuth } from '../models/context/AuthContext';
 import {
@@ -38,6 +39,7 @@ export function useMarkerCharacter() {
 
     const setCharacter = useCallback(async (id: MarkerCharacterId) => {
         setCharacterState(id);
+        track('character_changed', { character: id });
         try { localStorage.setItem(STORAGE_KEY, id); } catch { /* storage blocked */ }
         if (!user) return;
         const { error } = await supabase.from('user_preferences')

@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { Search, RefreshCw, CheckCircle } from 'lucide-react';
 import { useFeatureAccessController, GlobalFeatureState } from '../../controllers/admin/useFeatureAccessController';
 import { FEATURES, FeatureKey } from '../../models/admin/FeatureAccessTypes';
+import { useAuth } from '../../models/context/AuthContext';
+import { Navigate } from 'react-router-dom';
 
 interface ToggleProps {
     enabled: boolean;
@@ -27,6 +29,9 @@ function Toggle({ enabled, onChange, disabled, mixed }: ToggleProps) {
 }
 
 export default function FeatureAccessControl() {
+    // Only for changing settings: view-only admins go back to the admin home
+    const { isAdmin } = useAuth();
+    if (!isAdmin) return <Navigate to="/admin" replace />;
     const [searchParams, setSearchParams] = useSearchParams();
     const ctrl = useFeatureAccessController();
 

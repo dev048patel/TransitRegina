@@ -4,7 +4,7 @@ SMS commute alerts for Transit Regina, deployed as its own Railway service. If t
 
 For each saved commute (`public.weekly_schedules`), a trip with N buses gets N + 1 texts: "leave now", then "get off at the next stop" for each bus. If buses only cover part of the way, the rider gets a partial-trip notice. If no bus gets them there on time, they get a no-service notice with the earliest possible arrival.
 
-A rider gets texts only if they have opted in, have a verified number, have an active account and have not had text alerts switched off by an admin. Admins switch them off on the admin panel (Person → Features → "Text Alerts"), which writes `public.feature_access` (feature `sms_alerts`, enabled false). The planner, the sender (before every text) and broadcasts all check it, so switching someone off stops their texts within seconds (`src/access.ts`).
+A rider gets texts only if an admin has approved them, they have opted in, have a verified number and have an active account. Riders ask for text alerts on their profile once their number is verified; the admins get an email and approve or decline on the admin panel (People → "Text alert requests", or Person → Features → "Text Alerts"). Approving turns the rider's texts on and emails them. Approval is a row in `public.feature_access` (feature `sms_alerts`, enabled true); no row, or enabled false, means no texts (main repo `docs/security/013_sms_approval.sql`). The planner, the sender (before every text) and broadcasts all check it, so switching someone off stops their texts within seconds (`src/access.ts`).
 
 ```
 src/

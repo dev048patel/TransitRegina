@@ -174,14 +174,20 @@ export default function SignupPage() {
                                 <label className="text-sm font-medium text-gray-700">Mobile Number</label>
                                 <span className="text-xs text-gray-400">Optional</span>
                             </div>
-                            <input
-                                type="tel"
-                                value={mobile}
-                                onChange={e => handleMobileChange(e.target.value)}
-                                placeholder="+1 306-555-0199"
-                                className={inputCls(!!errors.mobile) + ' tracking-wide'}
-                                autoComplete="tel"
-                            />
+                            {/* +1 is fixed: every number is a Regina (+1) mobile, so only the 10 digits are typed */}
+                            <div className={'flex items-stretch rounded-xl border overflow-hidden focus-within:ring-2 focus-within:ring-[#003DA5]/30 focus-within:border-[#003DA5] transition ' + (errors.mobile ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-white')}>
+                                <span className="flex items-center px-4 bg-gray-50 border-r border-gray-200 text-sm text-gray-500 select-none" aria-hidden="true">+1</span>
+                                <input
+                                    type="tel"
+                                    inputMode="numeric"
+                                    value={mobile}
+                                    onChange={e => handleMobileChange(e.target.value)}
+                                    placeholder="306-555-0199"
+                                    aria-label="Mobile number, 10 digits"
+                                    className="flex-1 min-w-0 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 tracking-wide bg-transparent focus:outline-none"
+                                    autoComplete="tel-national"
+                                />
+                            </div>
                             {errors.mobile && <p className="text-red-500 text-xs mt-1">{errors.mobile}</p>}
                         </div>
 

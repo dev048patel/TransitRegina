@@ -57,6 +57,9 @@ const server = http.createServer((req, res) => {
         calls.push(call);
         let answer = respond(call);
         if (answer === undefined && table === 'settings' && call.method === 'GET') answer = [sendRow];
+        // Text alerts need approval: unless a test says otherwise, everyone asked about is approved
+        if (answer === undefined && table === 'feature_access' && call.method === 'GET' && call.query.get('enabled') === 'eq.true')
+            answer = (/^in\.\((.*)\)$/.exec(call.query.get('user_id') ?? '')?.[1] ?? '').split(',').filter(Boolean).map(user_id => ({ user_id: user_id.replace(/"/g, '') }));
         let status = 200;
         if (Array.isArray(answer) && answer.length === 2 && typeof answer[0] === 'number') [status, answer] = answer as [number, unknown];
         if (answer === undefined) answer = call.method === 'GET' ? [] : table.startsWith('rpc/') ? null : (Array.isArray(call.body) ? call.body : [call.body ?? {}]);

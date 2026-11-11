@@ -16,10 +16,11 @@ import {
 
     LogOut, Trash2, CheckCircle2, Pencil,
     Eye, MessageSquare,
-    ArrowLeft, KeyRound, MapPin,
+    ArrowLeft, KeyRound, MapPin, Mail,
 } from 'lucide-react';
 import logo from '../../New-Image.jpeg';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SITE } from '../../models/data/legal';
 import { useProfileController } from '../../controllers/auth/useProfileController';
 import { useMarkerCharacter } from '../../controllers/useMarkerCharacter';
 import { MARKER_CHARACTERS } from '../../models/data/markerCharacters';
@@ -110,7 +111,7 @@ function VerifyPhone({ phone, stage, code, setCode, loading, error, resendIn, on
                 <p className="text-sm font-medium text-gray-900">Verify your phone number</p>
                 <p className="text-xs text-gray-400 mt-0.5">
                     {stage === 'idle'
-                        ? <>Before you can turn on text alerts, confirm that <span className="font-medium text-gray-600">{phone}</span> is yours. We'll text it a code.</>
+                        ? <>Confirm that <span className="font-medium text-gray-600">{phone}</span> is yours. We'll text it a code.</>
                         : <>Enter the code we texted to <span className="font-medium text-gray-600">{phone}</span>. It expires in 10 minutes.</>}
                 </p>
             </div>
@@ -297,7 +298,7 @@ function GuestProfile() {
 /* ================================================================== */
 export default function ProfilePage() {
     const {
-        user, profile,
+        user, profile, displayPhone,
         profileLoading,
         showPasswordModal, setShowPasswordModal,
         newPassword, setNewPassword,
@@ -312,7 +313,7 @@ export default function ProfilePage() {
         showDeleteConfirm, setShowDeleteConfirm,
         deleteLoading, deleteError,
         handleDeleteAccount,
-        smsAllowed, smsLoading, smsError, handleSmsToggle,
+        smsAccess, requestSms, smsLoading, smsError, handleSmsToggle,
         verifyStage, verifyCode, setVerifyCode, verifyLoading, verifyError, resendIn, sendVerifyCode, confirmVerifyCode,
         handleLogout,
         handleLogoutEverywhere,
@@ -322,7 +323,7 @@ export default function ProfilePage() {
 
     const fullName = profile?.full_name ?? user?.fullName ?? '—';
     const email = user?.email ?? '—';
-    const phone = profile?.mobile_number ?? user?.mobile ?? null;
+    const phone = displayPhone;
     const initials = fullName.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
 
     return (
@@ -426,13 +427,20 @@ export default function ProfilePage() {
                                 <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5 block">
                                     Mobile <span className="normal-case font-normal text-gray-400">(optional)</span>
                                 </label>
-                                <input
-                                    type="tel"
-                                    value={editMobile}
-                                    onChange={e => setEditMobile(e.target.value)}
-                                    placeholder="+1 306-555-0199"
-                                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#003DA5]/30 focus:border-[#003DA5] transition"
-                                />
+                                {/* +1 is fixed: every number is a Regina (+1) mobile, so only the 10 digits are typed */}
+                                <div className="flex items-stretch rounded-xl border border-gray-200 focus-within:ring-2 focus-within:ring-[#003DA5]/30 focus-within:border-[#003DA5] transition overflow-hidden">
+                                    <span className="flex items-center px-3 bg-gray-50 border-r border-gray-200 text-sm text-gray-500 select-none" aria-hidden="true">+1</span>
+                                    <input
+                                        type="tel"
+                                        inputMode="numeric"
+                                        value={editMobile}
+                                        onChange={e => setEditMobile(e.target.value)}
+                                        placeholder="306-555-0199"
+                                        aria-label="Mobile number, 10 digits"
+                                        autoComplete="tel-national"
+                                        className="flex-1 min-w-0 px-3 py-2.5 text-sm text-gray-900 tracking-wide focus:outline-none"
+                                    />
+                                </div>
                             </div>
                             {/* Error */}
                             {editError && (
@@ -475,6 +483,16 @@ export default function ProfilePage() {
                                 verified={phone && profile ? !!profile.mobile_verified : undefined}
                                 loading={profileLoading && !profile}
                             />
+                            {/* An unverified number is verified right here (a new one gets its code as soon as it's saved) */}
+                            {phone && profile && !profile.mobile_verified && (
+                                <div className="mt-3 pt-3 border-t border-gray-50">
+                                    <VerifyPhone
+                                        phone={phone} stage={verifyStage} code={verifyCode} setCode={setVerifyCode}
+                                        loading={verifyLoading} error={verifyError} resendIn={resendIn}
+                                        onSend={sendVerifyCode} onConfirm={confirmVerifyCode}
+                                    />
+                                </div>
+                            )}
                         </>
                     )}
                 </SectionCard>
@@ -490,7 +508,7 @@ export default function ProfilePage() {
 
                 {/* SMS NOTIFICATIONS */}
                 <SectionCard title="SMS Departure Reminders" icon={MessageSquare}>
-                    {!smsAllowed ? (
+                    {smsAccess === 'declined' ? (
                         <p className="text-sm text-gray-500">
                             Text alerts are not available on your account. Contact us if you think this is a mistake.
                         </p>
@@ -499,11 +517,37 @@ export default function ProfilePage() {
                             Add a phone number to your profile above to enable SMS reminders.
                         </p>
                     ) : profile && !profile.mobile_verified ? (
-                        <VerifyPhone
-                            phone={phone} stage={verifyStage} code={verifyCode} setCode={setVerifyCode}
-                            loading={verifyLoading} error={verifyError} resendIn={resendIn}
-                            onSend={sendVerifyCode} onConfirm={confirmVerifyCode}
-                        />
+                        <p className="text-sm text-gray-500">
+                            Verify your phone number in Personal Info above, then you can ask for text alerts here.
+                        </p>
+                    ) : smsAccess === null ? (
+                        <p className="text-sm text-gray-400">{smsError || 'Loading…'}</p>
+                    ) : smsAccess === 'pending' ? (
+                        <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 text-blue-800 text-sm rounded-xl px-3 py-2.5">
+                            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span><strong>Request sent.</strong> We've emailed you a confirmation. Our team will review it soon, and we'll email you again as soon as your text alerts are approved.</span>
+                        </div>
+                    ) : smsAccess === 'none' ? (
+                        <div className="space-y-3">
+                            <p className="text-sm text-gray-600">
+                                Get a text when it's time to leave for your saved commute, and when to get off the bus. Text alerts are approved by our team; ask below and we'll email you once you're approved.
+                            </p>
+                            <button
+                                onClick={requestSms}
+                                disabled={smsLoading}
+                                className="w-full py-2.5 rounded-xl bg-[#003DA5] text-white text-sm font-medium hover:bg-[#002d7a] transition disabled:opacity-60"
+                            >
+                                {smsLoading ? 'Sending…' : 'Request text alerts'}
+                            </button>
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                                By asking, you agree to receive departure reminder texts from Transit Regina to{' '}
+                                <span className="font-medium text-gray-600">{phone}</span> once approved.
+                                Standard message rates may apply. Reply STOP anytime to unsubscribe.
+                            </p>
+                            {smsError && (
+                                <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{smsError}</p>
+                            )}
+                        </div>
                     ) : (
                         <div className="space-y-3">
                             {/* Toggle row */}
@@ -515,7 +559,7 @@ export default function ProfilePage() {
                                     <p className="text-xs text-gray-400 mt-0.5">
                                         {profile?.sms_opted_in
                                             ? `Active · reply STOP to unsubscribe`
-                                            : `You'll get a text 15 min before your scheduled bus`}
+                                            : `We'll text you when to leave for your saved commutes, and when to get off`}
                                     </p>
                                 </div>
                                 <button
@@ -552,6 +596,17 @@ export default function ProfilePage() {
                             )}
                         </div>
                     )}
+                </SectionCard>
+
+                {/* CONTACT US: bugs, ideas, or wanting to hear what's new */}
+                <SectionCard title="Contact us" icon={Mail}>
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                        Found a bug, have an idea for a new feature, or want updates from us? We'd love to hear from you. Write to us directly and we'll get back to you.
+                    </p>
+                    <a href={`mailto:${SITE.CONTACT_EMAIL}?subject=${encodeURIComponent('Transit Regina feedback')}`}
+                        className="mt-3 w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#003DA5]/20 text-[#003DA5] text-sm font-medium hover:bg-[#003DA5]/5 transition">
+                        <Mail className="w-4 h-4" /> {SITE.CONTACT_EMAIL}
+                    </a>
                 </SectionCard>
 
                 {/* ACCOUNT */}

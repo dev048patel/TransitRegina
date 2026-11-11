@@ -53,6 +53,7 @@ const AdminHome = React.lazy(() => import('./views/admin/AdminHome'));
 const People = React.lazy(() => import('./views/admin/People'));
 const PersonPage = React.lazy(() => import('./views/admin/PersonPage'));
 const VisitorPage = React.lazy(() => import('./views/admin/VisitorPage'));
+const TextAlerts = React.lazy(() => import('./views/admin/TextAlerts'));
 const Insights = React.lazy(() => import('./views/admin/Insights'));
 const ActivityLog = React.lazy(() => import('./views/admin/ActivityLog'));
 const Reports = React.lazy(() => import('./views/admin/Reports'));
@@ -186,6 +187,7 @@ function AppRoutes() {
                     <Route path="security" element={<SecurityCenter />} />
                     <Route path="activity" element={<ActivityLog />} />
                     <Route path="reports" element={<Reports />} />
+                    <Route path="text-alerts" element={<TextAlerts />} />
                     {/* Old addresses still work */}
                     <Route path="users" element={<Navigate to="/admin/people" replace />} />
                     <Route path="fac" element={<Navigate to="/admin/people/features" replace />} />

@@ -13,6 +13,7 @@ import { HealthService } from '../../models/services/HealthService';
 import { RealTimeService } from '../../models/services/RealTimeService';
 import { SmsOutageService } from '../../models/services/SmsOutageService';
 import { reginaDateKey, startOfReginaDay } from '../../models/services/ReginaTime';
+import { SmsAccessService, SMS_FEATURE } from '../../models/services/SmsAccessService';
 import { presentWithin, summarizeEvents, type VisitorEvent } from '../../models/services/UsageEvents';
 
 const router = Router();
@@ -68,7 +69,7 @@ router.get('/overview', async (_req: Request, res: Response) => {
     const today = startOfReginaDay(0).toISOString(), weekAgo = startOfReginaDay(-6).toISOString();
     const head = { count: 'exact' as const, head: true };
 
-    const [activeNow, signedInNow, visitorsToday, totalUsers, signupsToday, signupsWeek, criticalDay, week, recent, buses, openReports] = await Promise.all([
+    const [activeNow, signedInNow, visitorsToday, totalUsers, signupsToday, signupsWeek, criticalDay, week, buses, openReports, smsRequests] = await Promise.all([
         countOf(db.from('visitor_sessions').select('*', head).gte('last_seen', fiveMinAgo)),
         countOf(db.from('profiles').select('*', head).gte('last_active', fiveMinAgo)),
         countOf(db.from('visitor_sessions').select('*', head).gte('last_seen', today)),
@@ -78,9 +79,9 @@ router.get('/overview', async (_req: Request, res: Response) => {
         unhandledCriticalSince(dayAgo),
         // Counted in the database by Regina day (script 011): reading rows through the API stops at 1,000
         db.rpc('usage_days', { p_from: weekAgo, p_to: startOfReginaDay(1).toISOString() }),
-        db.from('security_events').select('type, severity, message, user_id, created_at').in('type', ADMIN_ACTIONS).order('created_at', { ascending: false }).limit(8),
         RealTimeService.getLiveBuses().then(b => b.length).catch(() => null),
         countOf(db.from('rider_reports').select('*', head).is('handled_at', null)),   // 0 before script 012
+        countOf(db.from('sms_access_requests').select('*', head)),   // 0 before script 013
     ]);
 
     // Seven Regina days, oldest first
@@ -95,6 +96,7 @@ router.get('/overview', async (_req: Request, res: Response) => {
         ...(criticalDay ? [{ level: 'critical', text: `${criticalDay} critical security event${criticalDay === 1 ? '' : 's'} in the last 24 hours`, link: '/admin/security' }] : []),
         ...health.config.map(text => ({ level: 'warning', text, link: '/admin/security' })),
         ...(openReports ? [{ level: 'warning', text: `${openReports} open rider report${openReports === 1 ? '' : 's'}`, link: '/admin/reports' }] : []),
+        ...(smsRequests ? [{ level: 'warning', text: `${smsRequests} rider${smsRequests === 1 ? '' : 's'} waiting for text alert approval`, link: '/admin/text-alerts' }] : []),
     ];
 
     res.json({
@@ -103,7 +105,6 @@ router.get('/overview', async (_req: Request, res: Response) => {
         today: { visitors: visitorsToday, searches: todayRow.searches, trips: todayRow.trips, signups: signupsToday },
         totals: { users: totalUsers, signupsWeek },
         trend, attention, usageReady: !week.error,
-        recent: await withPeople(recent.data ?? []),
     });
 });
 
@@ -342,7 +343,7 @@ router.post('/reports/handled', requireAdmin, async (req: Request, res: Response
     if (!Array.isArray(ids) || !ids.length || ids.length > 300 || !ids.every(n => Number.isInteger(n) && n > 0)) { reject(req, res, 'Invalid report list'); return; }
     const { data, error } = await serviceDb().from('rider_reports').update({ handled_at: new Date().toISOString(), handled_by: req.user!.id }).in('id', ids).is('handled_at', null).select('id');
     if (error) { console.error('[Admin] Reports handled error:', error.message); res.status(500).json({ error: 'Could not update the reports' }); return; }
-    await audit(req, 'reports_handled', `Admin marked ${data?.length ?? 0} rider report${data?.length === 1 ? '' : 's'} as handled`);
+    if (data?.length) await audit(req, 'reports_handled', `Admin marked ${data?.length ?? 0} rider report${data?.length === 1 ? '' : 's'} as handled`);
     res.json({ handled: data?.length ?? 0 });
 });
 
@@ -466,6 +467,7 @@ router.patch('/users/:id', requireAdmin, async (req: Request, res: Response) => 
 router.post('/fac/set', requireAdmin, async (req: Request, res: Response) => {
     const { userId, feature, enabled } = req.body ?? {};
     if (!isUuid(userId) || typeof feature !== 'string' || !FEATURE_KEY.test(feature) || typeof enabled !== 'boolean') { reject(req, res, 'Invalid feature access request'); return; }
+    if (feature === SMS_FEATURE) { await decideSms(req, res, userId, enabled); return; }
     const { error } = await getSupabaseAdmin().from('feature_access')
         .upsert({ user_id: userId, feature, enabled, updated_by: req.user!.id, updated_at: new Date().toISOString() }, { onConflict: 'user_id,feature' });
     if (error) { console.error('[Admin] Set feature error:', error.message); res.status(500).json({ error: 'Could not save the change' }); return; }
@@ -473,11 +475,11 @@ router.post('/fac/set', requireAdmin, async (req: Request, res: Response) => {
     res.json({ ok: true });
 });
 
-// Delete all feature_access rows for a user (resets to full access)
+// Delete a user's feature_access rows (resets to full access). Text alert approval is kept: it is approved one by one.
 router.delete('/fac/reset/:userId', requireAdmin, async (req: Request, res: Response) => {
     const { userId } = req.params;
     if (!isUuid(userId)) { reject(req, res, 'Invalid user id'); return; }
-    const { error } = await getSupabaseAdmin().from('feature_access').delete().eq('user_id', userId);
+    const { error } = await getSupabaseAdmin().from('feature_access').delete().eq('user_id', userId).neq('feature', SMS_FEATURE);
     if (error) { console.error('[Admin] Reset access error:', error.message); res.status(500).json({ error: 'Could not save the change' }); return; }
     await audit(req, 'feature_access_changed', `Admin reset feature access for user ${userId}`, 'info', userId);
     res.json({ ok: true });
@@ -487,6 +489,7 @@ router.delete('/fac/reset/:userId', requireAdmin, async (req: Request, res: Resp
 router.post('/fac/set-all', requireAdmin, async (req: Request, res: Response) => {
     const { feature, enabled, userIds } = req.body ?? {};
     if (typeof feature !== 'string' || !FEATURE_KEY.test(feature) || typeof enabled !== 'boolean') { reject(req, res, 'Invalid feature access request'); return; }
+    if (feature === SMS_FEATURE) { reject(req, res, 'Text alerts are approved one rider at a time'); return; }
     if (!enabled && (!Array.isArray(userIds) || userIds.length > 5000 || !userIds.every(isUuid))) { reject(req, res, 'Invalid user list'); return; }
 
     const db = getSupabaseAdmin();
@@ -498,6 +501,34 @@ router.post('/fac/set-all', requireAdmin, async (req: Request, res: Response) =>
     if (error) { console.error('[Admin] Set-all error:', error.message); res.status(500).json({ error: 'Could not save the change' }); return; }
     await audit(req, 'feature_access_changed', `Admin turned "${feature}" ${enabled ? 'on' : 'off'} for all users`, 'warning');
     res.json({ ok: true });
+});
+
+// ── Text alerts need approval: who is waiting, and the admin's decision ──
+/** Approve or decline text alerts for one rider; a rider who asked is told by email when approved */
+async function decideSms(req: Request, res: Response, userId: string, approve: boolean): Promise<void> {
+    try {
+        const { hadRequest } = await SmsAccessService.decide(userId, approve, req.user!.id);
+        await audit(req, 'feature_access_changed', `Admin ${approve ? 'approved' : hadRequest ? 'declined' : 'switched off'} text alerts for user ${userId}`, 'info', userId);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[Admin] Text alert decision error:', (err as Error).message);
+        res.status(500).json({ error: 'Could not save the change' });
+    }
+}
+
+router.get('/sms/requests', async (_req: Request, res: Response) => {
+    try { res.json({ setup: true, ...await SmsAccessService.overview() }); }
+    catch (err) {
+        if (notSetUp(err as { code?: string })) { res.json({ setup: false, requests: [] }); return; }
+        console.error('[Admin] Text alert requests error:', (err as Error).message);
+        res.status(500).json({ error: 'Could not load the requests' });
+    }
+});
+
+router.post('/sms/requests/:userId', requireAdmin, async (req: Request, res: Response) => {
+    const { userId } = req.params, { approve } = req.body ?? {};
+    if (!isUuid(userId) || typeof approve !== 'boolean') { reject(req, res, 'Invalid decision'); return; }
+    await decideSms(req, res, userId, approve);
 });
 
 // What the Security page shows: recent events, and whether the things the site depends on are up
@@ -527,7 +558,7 @@ router.post('/security/handled', requireAdmin, async (req: Request, res: Respons
     const { data, error } = await serviceDb().from('security_events')
         .update({ handled_at: new Date().toISOString(), handled_by: req.user!.id }).in('id', ids).is('handled_at', null).select('id');
     if (error) { console.error('[Admin] Mark handled error:', error.message); res.status(500).json({ error: 'Could not update the events. Has script 003 been run?' }); return; }
-    await audit(req, 'events_handled', `Admin marked ${data?.length ?? 0} security event${data?.length === 1 ? '' : 's'} as handled`);
+    if (data?.length) await audit(req, 'events_handled', `Admin marked ${data?.length ?? 0} security event${data?.length === 1 ? '' : 's'} as handled`);
     res.json({ handled: data?.length ?? 0 });
 });
 

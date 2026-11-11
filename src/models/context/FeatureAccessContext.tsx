@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { FeatureKey, FEATURES } from '../admin/FeatureAccessTypes';
+import { FeatureKey, FEATURES, featureDefault } from '../admin/FeatureAccessTypes';
 import { getUserFeatureAccess } from '../services/FeatureAccessService';
 
 type AccessMap = Record<FeatureKey, boolean>;
 
-const allEnabled = Object.fromEntries(FEATURES.map(f => [f.key, true])) as AccessMap;
+const allEnabled = Object.fromEntries(FEATURES.map(f => [f.key, featureDefault(f.key)])) as AccessMap;
 
 interface FeatureAccessCtx {
     hasFeature: (key: FeatureKey) => boolean;
@@ -14,7 +14,7 @@ interface FeatureAccessCtx {
 }
 
 const FeatureAccessContext = createContext<FeatureAccessCtx>({
-    hasFeature: () => true,
+    hasFeature: featureDefault,
     accessMap: allEnabled,
     refetch: () => {},
 });
@@ -32,7 +32,7 @@ export function FeatureAccessProvider({ children }: { children: React.ReactNode 
 
     return (
         <FeatureAccessContext.Provider value={{
-            hasFeature: (key) => accessMap[key] ?? true,
+            hasFeature: (key) => accessMap[key] ?? featureDefault(key),
             accessMap,
             refetch: load,
         }}>

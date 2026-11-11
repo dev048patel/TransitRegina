@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../models/lib/supabase';
 import { apiGet, apiPatch, apiDelete, apiPost } from '../../models/lib/apiClient';
-import { FEATURES, FeatureKey } from '../../models/admin/FeatureAccessTypes';
+import { FEATURES, FeatureKey, featureDefault } from '../../models/admin/FeatureAccessTypes';
 import type { ConfirmRequest } from '../../views/components/admin/ui';
 
 export interface Person {
@@ -61,7 +61,7 @@ export function usePersonController(id: string) {
     const patch = (fields: Record<string, unknown>) => async (reason: string) => { await apiPatch(`/api/admin/users/${id}`, { ...fields, reason }); await load(); };
 
     // A feature is on unless a row says otherwise
-    const featureOn = (key: FeatureKey) => person?.features.find(f => f.feature === key)?.enabled ?? true;
+    const featureOn = (key: FeatureKey) => person?.features.find(f => f.feature === key)?.enabled ?? featureDefault(key);
     const toggleFeature = async (key: FeatureKey) => {
         try { await apiPost('/api/admin/fac/set', { userId: id, feature: key, enabled: !featureOn(key) }); await load(); }
         catch (e) { setError((e as Error).message); }

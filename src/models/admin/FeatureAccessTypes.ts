@@ -60,6 +60,9 @@ export const FEATURES: FeatureDef[] = [
     },
 ];
 
+/** With no feature_access row: every feature is on, except text alerts, which need an admin's approval */
+export const featureDefault = (key: FeatureKey): boolean => key !== 'sms_alerts';
+
 /** One row from the `feature_access` table */
 export interface FeatureAccessRow {
     id: string;

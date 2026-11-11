@@ -5,7 +5,8 @@
  */
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, Bus, BarChart3, ShieldAlert, ScrollText, ArrowLeft, Menu, ShieldCheck, X, Flag, Eye } from 'lucide-react';
+import { Home, Users, Bus, BarChart3, ShieldAlert, ScrollText, ArrowLeft, Menu, ShieldCheck, X, Flag, Eye, MessageSquare } from 'lucide-react';
+import { useWaitingTextAlerts } from '../../controllers/admin/useTextAlertsController';
 import { useAuth } from '../../models/context/AuthContext';
 import { supabase } from '../../models/lib/supabase';
 import { twoStepTimeOf } from '../../models/auth/AuthModel';
@@ -13,6 +14,7 @@ import { twoStepTimeOf } from '../../models/auth/AuthModel';
 const NAV = [
     { to: '/admin', label: 'Home', icon: Home, end: true },
     { to: '/admin/people', label: 'People', icon: Users },
+    { to: '/admin/text-alerts', label: 'Text alerts', icon: MessageSquare },
     { to: '/admin/service', label: 'Service', icon: Bus, adminOnly: true },   // only for changing routes: hidden from view-only admins
     { to: '/admin/insights', label: 'Insights', icon: BarChart3 },
     { to: '/admin/reports', label: 'Reports', icon: Flag },
@@ -28,6 +30,7 @@ export default function AdminLayout() {
     const { pathname } = useLocation();
     const [menuOpen, setMenuOpen] = useState(false);
     useEffect(() => { setMenuOpen(false); }, [pathname]);
+    const waiting = useWaitingTextAlerts(pathname);   // a count beside "Text alerts" when riders are waiting
 
     // Sign out of an unattended admin panel
     useEffect(() => {
@@ -66,6 +69,7 @@ export default function AdminLayout() {
                     className={({ isActive }) => 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ' +
                         (isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white')}>
                     <Icon size={18} /> {label}
+                    {to === '/admin/text-alerts' && waiting > 0 && <span className="ml-auto min-w-[1.25rem] px-1.5 rounded-full bg-amber-400 text-slate-900 text-xs font-bold text-center tabular-nums" aria-label={`${waiting} waiting`}>{waiting}</span>}
                 </NavLink>
             ))}
         </nav>

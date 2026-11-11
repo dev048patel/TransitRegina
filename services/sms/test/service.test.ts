@@ -131,11 +131,11 @@ test('broadcast needs the internal token, then texts each opted-in rider on the 
     assert.equal(texts[0].body, 'Route 4 detour on Albert St - expect delays', 'the dash is swapped so the text stays one segment');
 });
 
-test('broadcast leaves out riders an admin has switched text alerts off for', async () => {
+test('broadcast leaves out riders who are not approved for text alerts', async () => {
     setRespond(c => {
         if (c.table === 'weekly_schedules') return [{ user_id: 'u1' }, { user_id: 'u2' }];
         if (c.table === 'profiles') return [{ id: 'u1', mobile_number: PHONE }, { id: 'u2', mobile_number: '+13065550222' }];
-        if (c.table === 'feature_access') return [{ user_id: 'u2' }];
+        if (c.table === 'feature_access') return [{ user_id: 'u1' }];   // only u1 is approved
         if (c.table === 'messages' && c.method === 'POST') return [{ id: 'm1' }];
         return undefined;
     });
@@ -150,7 +150,7 @@ test('broadcast leaves out riders an admin has switched text alerts off for', as
 
 function senderDb(opts: { alert: AlertDb; plan: PlanDb; legs: LegDb[]; claim?: string; profile?: object; revoked?: boolean }) {
     setRespond(c => {
-        if (c.table === 'feature_access') return opts.revoked ? [{ user_id: opts.alert.user_id }] : [];
+        if (c.table === 'feature_access') return opts.revoked ? [] : [{ user_id: opts.alert.user_id }];
         if (c.table === 'alerts' && c.method === 'GET') return [opts.alert];
         if (c.table === 'rpc/claim_alert') return opts.claim ?? 'queued';
         if (c.table === 'profiles' && c.method === 'GET') return [opts.profile ?? { mobile_number: PHONE, sms_opted_in: true, mobile_verified: true }];
@@ -286,7 +286,7 @@ const AT_0430 = Date.parse('2026-10-21T10:30:00Z');   // Wednesday 4:30 AM in Re
 
 function plannerDb(planned: string[] = [], revoked: string[] = []) {
     setRespond(c => {
-        if (c.table === 'feature_access') return revoked.map(user_id => ({ user_id }));
+        if (c.table === 'feature_access') return ['u1', 'u2'].filter(u => !revoked.includes(u)).map(user_id => ({ user_id }));
         if (c.table === 'weekly_schedules') return [
             { id: 's1', user_id: 'u1', arrive_by: '09:00', depart_by: null, from_dest_id: 'd1', to_dest_id: 'd2' },
             { id: 's2', user_id: 'u2', arrive_by: '09:00', depart_by: null, from_dest_id: 'd1', to_dest_id: 'd2' },

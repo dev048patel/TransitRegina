@@ -25,6 +25,7 @@ export const USAGE_LABEL: Record<string, string> = {
     profile_updated: 'Updated their profile',
     character_changed: 'Changed map character',
     sms_opt_in: 'Turned on text alerts',
+    sms_access_requested: 'Asked for text alerts',
     sms_opt_out: 'Turned off text alerts',
     phone_verified: 'Verified their phone',
     phone_code_sent: 'Asked for a phone code',

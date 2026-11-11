@@ -14,7 +14,6 @@ export interface Overview {
     /** false until docs/security/011_usage_analytics.sql has been run */
     usageReady: boolean;
     attention: { level: 'critical' | 'warning'; text: string; link: string }[];
-    recent: { type: string; severity: string; message: string; admin: string; created_at: string }[];
 }
 
 const REFRESH_MS = 15_000;

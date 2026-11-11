@@ -10,16 +10,17 @@ import { getSupabaseAdmin } from '../../models/lib/supabaseAdmin';
 import { SITE } from '../../models/data/legal';
 
 const router = Router();
-const MOBILE = /^\+1 \d{3}-\d{3}-\d{4}$/;
+import { toStoredPhone } from '../../models/lib/phone';
 
-// POST /api/auth/login-mobile  { mobile: "+1 306-555-0199", password } → { access_token, refresh_token }
+// POST /api/auth/login-mobile  { mobile: "306-555-0199" (any format), password } → { access_token, refresh_token }
 // Sign-in with a phone number. The backend finds the account and signs in itself, so the caller
 // never learns which email a number belongs to. Every failure looks the same, and it is limited
 // to a few tries a minute per address.
 router.post('/login-mobile', rateLimit('login-mobile', 5), async (req: Request, res: Response) => {
-    const { mobile, password } = req.body ?? {};
+    const { password } = req.body ?? {};
     const refuse = () => { res.status(401).json({ error: 'Invalid credentials' }); };
-    if (typeof mobile !== 'string' || !MOBILE.test(mobile) || !isText(password, 200)) { refuse(); return; }
+    const mobile = typeof req.body?.mobile === 'string' && req.body.mobile.length <= 30 ? toStoredPhone(req.body.mobile) : null;
+    if (!mobile || !isText(password, 200)) { refuse(); return; }
 
     const { data: email, error } = await serviceDb().rpc('get_email_by_mobile', { mobile });
     if (error) { console.error('[Auth] Mobile lookup failed:', error.message); res.status(503).json({ error: 'Mobile sign-in is unavailable right now' }); return; }
@@ -88,6 +89,7 @@ const RIDER_DATA: [table: string, column: string, schema?: 'sms'][] = [
     ['usage_events', 'user_id'],
     ['rider_reports', 'user_id'],   // the note is the rider's own words
     ['admin_notes', 'user_id'],
+    ['sms_access_requests', 'user_id'],
     ['user_preferences', 'id'],
     ['profiles', 'id'],
 ];

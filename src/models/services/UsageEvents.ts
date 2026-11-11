@@ -57,7 +57,7 @@ export const CLIENT_EVENTS: Record<string, Record<string, Field>> = {
     character_changed: { character: s(20) },
 };
 /** Kinds only the server records, after the action really happened (the app can't send these) */
-export const SERVER_EVENTS = ['sms_opt_in', 'sms_opt_out', 'phone_code_sent', 'phone_verified', 'trip_texts_on'] as const;
+export const SERVER_EVENTS = ['sms_opt_in', 'sms_opt_out', 'sms_access_requested', 'phone_code_sent', 'phone_verified', 'trip_texts_on'] as const;
 export type ServerEvent = typeof SERVER_EVENTS[number];
 
 export interface UsageRow { at?: string; visitor: string; user_id: string | null; session?: string | null; kind: string; page: string | null; device: string | null; detail: Record<string, unknown> }

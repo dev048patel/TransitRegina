@@ -36,10 +36,15 @@ export function useSecurityController() {
         return () => clearInterval(id);
     }, [load]);
 
+    /* Bots and expired sign-ins: the most common row, and rarely worth a look on its own. Shown under "Everything";
+       one address doing it a lot is recorded separately as a critical "burst", which does show. */
+    const ROUTINE = new Set(['auth_failed']);
+    const needsLook = (e: SecurityEvent) => !ROUTINE.has(e.type);
+
     const groups = useMemo(() => {
         const out = new Map<string, EventGroup>();
         for (const e of data?.events ?? []) {           // newest first, so the first one seen sets the time shown
-            if (!(filter === 'all' || e.severity === filter || (filter === 'warning' && e.severity === 'critical'))) continue;
+            if (!(filter === 'all' || ((e.severity === filter || (filter === 'warning' && e.severity === 'critical')) && needsLook(e)))) continue;
             const key = [e.type, e.severity, e.ip, e.who, e.message, !!e.handledAt].join('|');
             const g = out.get(key) ?? { ...e, count: 0, ids: [], paths: [] };
             g.count++;
@@ -54,6 +59,6 @@ export function useSecurityController() {
     const last24h = (data?.events ?? []).filter(e => !e.handledAt && new Date(e.at).getTime() > dayAgo);
     return {
         data, error, groups, filter, setFilter, reload: load, showHandled, setShowHandled, markHandled,
-        counts: { critical: last24h.filter(e => e.severity === 'critical').length, warning: last24h.filter(e => e.severity === 'warning').length },
+        counts: { critical: last24h.filter(e => e.severity === 'critical').length, warning: last24h.filter(e => e.severity === 'warning' && needsLook(e)).length },
     };
 }

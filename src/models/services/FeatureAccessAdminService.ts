@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { apiPost, apiDelete } from '../lib/apiClient';
-import { FeatureKey, UserAccessRecord, FEATURES } from '../admin/FeatureAccessTypes';
+import { FeatureKey, UserAccessRecord, FEATURES, featureDefault } from '../admin/FeatureAccessTypes';
 
 const FEATURE_KEYS = FEATURES.map(f => f.key);
 
@@ -15,7 +15,7 @@ export async function getAllUsersWithAccess(): Promise<UserAccessRecord[]> {
     const accessRows = accessResult.data ?? [];
 
     return profiles.map(p => {
-        const access = Object.fromEntries(FEATURE_KEYS.map(k => [k, true])) as Record<FeatureKey, boolean>;
+        const access = Object.fromEntries(FEATURE_KEYS.map(k => [k, featureDefault(k)])) as Record<FeatureKey, boolean>;
         for (const row of accessRows) {
             if (row.user_id === p.id && FEATURE_KEYS.includes(row.feature)) {
                 access[row.feature as FeatureKey] = row.enabled;
@@ -35,7 +35,7 @@ export async function setFeatureAccess(userId: string, feature: FeatureKey, enab
     await apiPost('/api/admin/fac/set', { userId, feature, enabled });
 }
 
-/** Admin: delete all restriction rows for a user (resets to full access) */
+/** Admin: delete a user's restriction rows (resets to full access; text alert approval is kept) */
 export async function resetUserAccess(userId: string): Promise<void> {
     await apiDelete(`/api/admin/fac/reset/${userId}`);
 }

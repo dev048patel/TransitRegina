@@ -312,7 +312,7 @@ export default function ProfilePage() {
         showDeleteConfirm, setShowDeleteConfirm,
         deleteLoading, deleteError,
         handleDeleteAccount,
-        smsAllowed, smsLoading, smsError, handleSmsToggle,
+        smsAccess, requestSms, smsLoading, smsError, handleSmsToggle,
         verifyStage, verifyCode, setVerifyCode, verifyLoading, verifyError, resendIn, sendVerifyCode, confirmVerifyCode,
         handleLogout,
         handleLogoutEverywhere,
@@ -490,7 +490,7 @@ export default function ProfilePage() {
 
                 {/* SMS NOTIFICATIONS */}
                 <SectionCard title="SMS Departure Reminders" icon={MessageSquare}>
-                    {!smsAllowed ? (
+                    {smsAccess === 'declined' ? (
                         <p className="text-sm text-gray-500">
                             Text alerts are not available on your account. Contact us if you think this is a mistake.
                         </p>
@@ -504,6 +504,34 @@ export default function ProfilePage() {
                             loading={verifyLoading} error={verifyError} resendIn={resendIn}
                             onSend={sendVerifyCode} onConfirm={confirmVerifyCode}
                         />
+                    ) : smsAccess === null ? (
+                        <p className="text-sm text-gray-400">{smsError || 'Loading…'}</p>
+                    ) : smsAccess === 'pending' ? (
+                        <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 text-blue-800 text-sm rounded-xl px-3 py-2.5">
+                            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span>Request sent. An admin will review it, and we'll email you as soon as your text alerts are approved.</span>
+                        </div>
+                    ) : smsAccess === 'none' ? (
+                        <div className="space-y-3">
+                            <p className="text-sm text-gray-600">
+                                Get a text when it's time to leave for your saved commute, and when to get off the bus. Text alerts are approved by our team; ask below and we'll email you once you're approved.
+                            </p>
+                            <button
+                                onClick={requestSms}
+                                disabled={smsLoading}
+                                className="w-full py-2.5 rounded-xl bg-[#003DA5] text-white text-sm font-medium hover:bg-[#002d7a] transition disabled:opacity-60"
+                            >
+                                {smsLoading ? 'Sending…' : 'Request text alerts'}
+                            </button>
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                                By asking, you agree to receive departure reminder texts from Transit Regina to{' '}
+                                <span className="font-medium text-gray-600">{phone}</span> once approved.
+                                Standard message rates may apply. Reply STOP anytime to unsubscribe.
+                            </p>
+                            {smsError && (
+                                <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{smsError}</p>
+                            )}
+                        </div>
                     ) : (
                         <div className="space-y-3">
                             {/* Toggle row */}

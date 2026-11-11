@@ -9,9 +9,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../models/lib/supabase';
 import { useAuth } from '../../models/context/AuthContext';
-import { useFeatureAccess } from '../../models/context/FeatureAccessContext';
 import { formatMobile, deleteAccount, changePassword } from '../../models/services/AuthService';
-import { SmsService } from '../../models/services/SmsService';
+import { SmsService, type SmsAccess } from '../../models/services/SmsService';
 import { track } from '../../models/services/UsageTracker';
 
 /* ── Types ──────────────────────────────────────────────────────── */
@@ -91,10 +90,14 @@ export function useProfileController() {
     const [deleteError, setDeleteError] = useState('');
     const [deletePassword, setDeletePassword] = useState('');
 
-    // SMS notifications
-    const { hasFeature } = useFeatureAccess();
+    // SMS notifications: they need an admin's approval, asked for once the phone is verified
+    const [smsAccess, setSmsAccess] = useState<SmsAccess | null>(null);
     const [smsLoading, setSmsLoading] = useState(false);
     const [smsError, setSmsError] = useState('');
+    useEffect(() => {
+        if (!user) return;
+        SmsService.accessStatus().then(setSmsAccess).catch(() => setSmsError('Could not load your text alert status. Refresh to try again.'));
+    }, [user?.id]);
 
     // Phone verification: 'idle' until a code has been sent
     const [verifyStage, setVerifyStage] = useState<'idle' | 'sent'>('idle');
@@ -319,6 +322,18 @@ export function useProfileController() {
         }
     }, []);
 
+    const requestSms = useCallback(async () => {
+        setSmsLoading(true);
+        setSmsError('');
+        try {
+            setSmsAccess(await SmsService.requestAccess());
+        } catch (err: any) {
+            setSmsError(err?.message ?? 'Your request could not be sent. Try again.');
+        } finally {
+            setSmsLoading(false);
+        }
+    }, []);
+
     /* ── Phone verification ─────────────────────────────────────── */
     const sendVerifyCode = useCallback(async () => {
         setVerifyLoading(true);
@@ -411,7 +426,7 @@ export function useProfileController() {
         deletePassword, setDeletePassword,
         handleDeleteAccount,
         // SMS notifications
-        smsAllowed: hasFeature('sms_alerts'),
+        smsAccess, requestSms,
         smsLoading, smsError, handleSmsToggle,
         // Phone verification
         verifyStage, verifyCode, setVerifyCode: (v: string) => setVerifyCode(v.replace(/\D/g, '').slice(0, 10)),

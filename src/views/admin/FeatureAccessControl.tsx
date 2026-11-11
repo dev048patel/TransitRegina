@@ -83,7 +83,8 @@ export default function FeatureAccessControl() {
             <div className="bg-white rounded-lg border border-slate-200 p-4">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">Global Switches</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                    {FEATURES.map(f => {
+                    {/* Text alerts are approved one rider at a time, so they have no global switch */}
+                    {FEATURES.filter(f => f.key !== 'sms_alerts').map(f => {
                         const gState: GlobalFeatureState = ctrl.globalFeatureState[f.key];
                         const isOn = gState === 'on';
                         const isMixed = gState === 'mixed';

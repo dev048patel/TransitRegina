@@ -88,6 +88,7 @@ const RIDER_DATA: [table: string, column: string, schema?: 'sms'][] = [
     ['usage_events', 'user_id'],
     ['rider_reports', 'user_id'],   // the note is the rider's own words
     ['admin_notes', 'user_id'],
+    ['sms_access_requests', 'user_id'],
     ['user_preferences', 'id'],
     ['profiles', 'id'],
 ];

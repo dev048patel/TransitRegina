@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../models/context/AuthContext';
-import { UserAccessRecord, FeatureKey, FEATURES } from '../../models/admin/FeatureAccessTypes';
+import { UserAccessRecord, FeatureKey, FEATURES, featureDefault } from '../../models/admin/FeatureAccessTypes';
 import {
     getAllUsersWithAccess,
     setFeatureAccess,
@@ -83,12 +83,12 @@ export function useFeatureAccessController() {
         }
     }, [user, users]);
 
-    /** Reset all features to enabled for one user */
+    /** Reset all features to enabled for one user (text alert approval is kept) */
     const handleReset = useCallback(async (userId: string) => {
         setSaving(`reset:${userId}`);
         setUsers(prev => prev.map(u =>
             u.userId === userId
-                ? { ...u, access: Object.fromEntries(Object.keys(u.access).map(k => [k, true])) as UserAccessRecord['access'] }
+                ? { ...u, access: Object.fromEntries(Object.entries(u.access).map(([k, v]) => [k, k === 'sms_alerts' ? v : true])) as UserAccessRecord['access'] }
                 : u,
         ));
         try {
@@ -111,7 +111,8 @@ export function useFeatureAccessController() {
 
     const stats = useMemo(() => {
         const total = users.length;
-        const restricted = users.filter(u => Object.values(u.access).some(v => !v)).length;
+        // Text alerts are off until approved, so not having them isn't a restriction
+        const restricted = users.filter(u => (Object.entries(u.access) as [FeatureKey, boolean][]).some(([k, v]) => !v && featureDefault(k))).length;
         return { total, restricted };
     }, [users]);
 

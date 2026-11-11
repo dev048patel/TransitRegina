@@ -78,6 +78,9 @@ const fake = http.createServer((req, res) => {
             if (Array.isArray(custom) && custom.length === 2 && typeof custom[0] === 'number') return send(custom[0], custom[1]);
             return send(200, single && Array.isArray(custom) ? custom[0] : custom);
         }
+        // Text alerts need approval: unless a test says otherwise, everyone asked about is approved
+        if (url.startsWith('/rest/v1/feature_access') && req.method === 'GET' && url.includes('feature=eq.sms_alerts') && url.includes('enabled=eq.true'))
+            return send(200, (/user_id=in\.\(([^)]*)\)/.exec(decodeURIComponent(url))?.[1] ?? '').split(',').filter(Boolean).map(id => ({ user_id: id.replace(/"/g, '') })));
         if (url.startsWith('/auth/v1/token')) {
             return body?.email === 'rider@example.com' && body?.password === 'correct-password'
                 ? send(200, { access_token: T.user, refresh_token: 'refresh-token', token_type: 'bearer', expires_in: 3600, user: { id: USER, aud: 'authenticated', email: body.email } })
@@ -704,19 +707,127 @@ test('a broadcast goes through the SMS service, with its internal token', async 
     assert.ok(!calls.some(c => c.url.startsWith('/rest/v1/weekly_schedules')), 'this API no longer looks up the recipients itself');
 });
 
-test('a rider an admin switched text alerts off for cannot opt back in', async () => {
+test('text alerts need approval: a rider without it cannot turn them on', async () => {
+    const verified = (method: string, url: string) => method === 'GET' && url.startsWith('/rest/v1/profiles') && url.includes('select=mobile_number') ? [{ mobile_number: '+13065550111', mobile_verified: true }] : undefined;
     answer = (method, url) => {
-        if (method === 'GET' && url.startsWith('/rest/v1/profiles') && url.includes('select=mobile_number')) return [{ mobile_number: '+13065550111', mobile_verified: true }];
-        if (method === 'GET' && url.startsWith('/rest/v1/feature_access') && url.includes('feature=eq.sms_alerts')) return [{ user_id: USER }];
-        return undefined;
+        if (method === 'GET' && url.startsWith('/rest/v1/feature_access') && url.includes('feature=eq.sms_alerts')) return [];   // no approval row
+        return verified(method, url);
     };
     const r = await api('POST', '/api/sms/opt-in', { token: T.user });
     assert.equal(r.status, 403);
-    assert.match(r.json.error, /not available on your account/);
+    assert.match(r.json.error, /approval/);
     assert.ok(!calls.some(c => c.method === 'PATCH' && c.url.startsWith('/rest/v1/profiles')), 'sms_opted_in is not turned on');
 
-    answer = (method, url) => method === 'GET' && url.startsWith('/rest/v1/profiles') && url.includes('select=mobile_number') ? [{ mobile_number: '+13065550111', mobile_verified: true }] : undefined;
-    assert.equal((await api('POST', '/api/sms/opt-in', { token: T.user })).status, 200, 'with no row, text alerts are allowed');
+    answer = verified;   // the stand-in approves by default
+    assert.equal((await api('POST', '/api/sms/opt-in', { token: T.user })).status, 200, 'approved: they can turn texts on');
+});
+
+/* ── Asking for text alerts, and an admin's decision ── */
+
+const askingRider = { full_name: 'Riley Rider', email: 'riley@example.com', mobile_number: '+13065550111', mobile_verified: true };
+
+test('a verified rider asks for text alerts: the request waits, consent is recorded and the admins get one email', async () => {
+    let asked = false;
+    answer = (method, url) => {
+        if (method === 'GET' && url.startsWith('/rest/v1/profiles') && url.includes('mobile_verified')) return [askingRider];
+        if (method === 'GET' && url.startsWith('/rest/v1/feature_access')) return [];
+        if (method === 'GET' && url.startsWith('/rest/v1/sms_access_requests')) return asked ? [{ user_id: USER }] : [];
+        if (method === 'POST' && url.startsWith('/rest/v1/sms_access_requests')) { const first = !asked; asked = true; return first ? [{ user_id: USER }] : []; }
+        return undefined;
+    };
+    assert.equal((await api('GET', '/api/sms/access', { token: T.user })).json.status, 'none');
+    const r = await api('POST', '/api/sms/access/request', { token: T.user });
+    assert.deepEqual([r.status, r.json.status], [200, 'pending']);
+    const insert = calls.find(c => c.method === 'POST' && c.url.startsWith('/rest/v1/sms_access_requests'))!;
+    assert.equal(insert.body.user_id ?? insert.body[0]?.user_id, USER, 'the rider comes from the login, not the body');
+    assert.ok(calls.some(c => c.method === 'PATCH' && c.url.startsWith('/rest/v1/profiles') && c.body?.sms_consent_at), 'asking is consent');
+    assert.ok(!calls.some(c => c.method === 'PATCH' && c.url.startsWith('/rest/v1/profiles') && c.body?.sms_opted_in), 'no texts until approved');
+    await settle();
+    assert.equal(mails.length, 1);
+    assert.match(mails[0].subject, /Text alert request from Riley Rider/);
+    assert.equal((await api('GET', '/api/sms/access', { token: T.user })).json.status, 'pending');
+
+    await api('POST', '/api/sms/access/request', { token: T.user });   // asks again
+    await settle();
+    assert.equal(mails.length, 1, 'the admins are told once');
+});
+
+test('asking for text alerts needs a verified phone, and a declined rider cannot ask again', async () => {
+    answer = (method, url) => method === 'GET' && url.startsWith('/rest/v1/profiles') && url.includes('mobile_verified') ? [{ ...askingRider, mobile_verified: false }] : undefined;
+    assert.equal((await api('POST', '/api/sms/access/request', { token: T.user })).status, 400);
+    answer = (method, url) => {
+        if (method === 'GET' && url.startsWith('/rest/v1/profiles') && url.includes('mobile_verified')) return [askingRider];
+        if (method === 'GET' && url.startsWith('/rest/v1/feature_access')) return [{ enabled: false }];
+        return undefined;
+    };
+    const r = await api('POST', '/api/sms/access/request', { token: T.user });
+    assert.equal(r.status, 403);
+    assert.ok(!calls.some(c => c.method === 'POST' && c.url.startsWith('/rest/v1/sms_access_requests')));
+});
+
+test('an admin approves a request: texts turn on, the rider is emailed, and it is logged', async () => {
+    const riderMails: { to: string; subject: string; text: string }[] = [];
+    const { SmsAccessService } = await import('../src/models/services/SmsAccessService');
+    SmsAccessService._setMailer(async (to, subject, text) => { riderMails.push({ to, subject, text }); });
+    try {
+        answer = (method, url) => {
+            if (method === 'DELETE' && url.startsWith('/rest/v1/sms_access_requests')) return [{ user_id: USER }];
+            if (method === 'PATCH' && url.startsWith('/rest/v1/profiles')) return [{ email: 'riley@example.com', full_name: 'Riley Rider', mobile_number: '+13065550111' }];
+            return undefined;
+        };
+        assert.equal((await api('POST', `/api/admin/sms/requests/${USER}`, { token: T.viewer, body: { approve: true } })).status, 403, 'view-only admins cannot decide');
+        const r = await api('POST', `/api/admin/sms/requests/${USER}`, { token: T.admin, body: { approve: true } });
+        assert.equal(r.status, 200);
+        const grant = calls.find(c => c.method === 'POST' && c.url.startsWith('/rest/v1/feature_access'))!;
+        assert.deepEqual([grant.body.feature, grant.body.enabled, grant.body.user_id, grant.body.updated_by], ['sms_alerts', true, USER, ADMIN]);
+        const optIn = calls.find(c => c.method === 'PATCH' && c.url.startsWith('/rest/v1/profiles'))!;
+        assert.equal(optIn.body.sms_opted_in, true);
+        assert.match(decodeURIComponent(optIn.url), /mobile_verified=eq\.true/, 'only a verified number');
+        assert.equal(riderMails.length, 1);
+        assert.deepEqual([riderMails[0].to, riderMails[0].subject], ['riley@example.com', 'Your text alerts are approved']);
+        assert.match(riderMails[0].text, /request for text alerts has been accepted/);
+        assert.match(riderMails[0].text, /306-555-0111/);
+        await settle();
+        assert.ok(events.recent().some(e => e.type === 'feature_access_changed' && /approved text alerts/.test(e.message) && e.userId === ADMIN));
+    } finally { SmsAccessService._setMailer(null); }
+});
+
+test('approving someone who never asked only allows it, and declining keeps texts off without an email', async () => {
+    const riderMails: string[] = [];
+    const { SmsAccessService } = await import('../src/models/services/SmsAccessService');
+    SmsAccessService._setMailer(async to => { riderMails.push(to); });
+    try {
+        await api('POST', '/api/admin/fac/set', { token: T.admin, body: { userId: OTHER, feature: 'sms_alerts', enabled: true } });   // the Features page
+        assert.ok(calls.some(c => c.method === 'POST' && c.url.startsWith('/rest/v1/feature_access') && c.body.enabled === true));
+        assert.ok(!calls.some(c => c.method === 'PATCH' && c.url.startsWith('/rest/v1/profiles')), 'no texts without their consent');
+        calls.length = 0;
+        answer = (method, url) => method === 'DELETE' && url.startsWith('/rest/v1/sms_access_requests') ? [{ user_id: OTHER }] : undefined;
+        assert.equal((await api('POST', `/api/admin/sms/requests/${OTHER}`, { token: T.admin, body: { approve: false } })).status, 200);
+        assert.ok(calls.some(c => c.method === 'POST' && c.url.startsWith('/rest/v1/feature_access') && c.body.enabled === false));
+        assert.ok(!calls.some(c => c.method === 'PATCH' && c.url.startsWith('/rest/v1/profiles')));
+        assert.equal(riderMails.length, 0);
+    } finally { SmsAccessService._setMailer(null); }
+});
+
+test('text alerts have no switch for everyone, and resetting a person keeps their approval', async () => {
+    const all = await api('POST', '/api/admin/fac/set-all', { token: T.admin, body: { feature: 'sms_alerts', enabled: true } });
+    assert.equal(all.status, 400);
+    assert.ok(!calls.some(c => c.url.startsWith('/rest/v1/feature_access') && c.method !== 'GET'), 'nothing changed');
+    await api('DELETE', `/api/admin/fac/reset/${OTHER}`, { token: T.admin });
+    const reset = calls.find(c => c.method === 'DELETE' && c.url.startsWith('/rest/v1/feature_access'))!;
+    assert.match(decodeURIComponent(reset.url), /feature=neq\.sms_alerts/);
+});
+
+test('the admins see who is waiting, and the home page flags it', async () => {
+    answer = (method, url) => {
+        if (method === 'GET' && url.startsWith('/rest/v1/sms_access_requests')) return [{ user_id: USER, requested_at: '2026-11-10T15:00:00Z' }];
+        if (method === 'GET' && url.startsWith('/rest/v1/profiles') && url.includes('mobile_number')) return [{ id: USER, full_name: 'Riley Rider', email: 'riley@example.com', mobile_number: '+13065550111' }];
+        return undefined;
+    };
+    const r = await api('GET', '/api/admin/sms/requests', { token: T.viewer });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.requests, [{ userId: USER, requestedAt: '2026-11-10T15:00:00Z', name: 'Riley Rider', email: 'riley@example.com', phone: '+13065550111' }]);
+    assert.equal((await api('GET', '/api/admin/sms/requests', { token: T.user })).status, 403, 'riders cannot see the list');
 });
 
 /* ── Phone verification ── */

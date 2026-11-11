@@ -1,4 +1,7 @@
-import { apiPost, apiPatch } from '../lib/apiClient';
+import { apiGet, apiPost, apiPatch } from '../lib/apiClient';
+
+/** Text alerts need an admin's approval: where the rider stands */
+export type SmsAccess = 'approved' | 'pending' | 'declined' | 'none';
 
 export const SmsService = {
     async optIn(): Promise<void> {
@@ -7,6 +10,15 @@ export const SmsService = {
 
     async optOut(): Promise<void> {
         await apiPost('/api/sms/opt-out');
+    },
+
+    async accessStatus(): Promise<SmsAccess> {
+        return ((await (await apiGet('/api/sms/access')).json()) as { status: SmsAccess }).status;
+    },
+
+    // Asks the admins for text alerts (this is the rider's consent); texts start once approved
+    async requestAccess(): Promise<SmsAccess> {
+        return ((await (await apiPost('/api/sms/access/request')).json()) as { status: SmsAccess }).status;
     },
 
     // Texts a one-time code to the number on the profile

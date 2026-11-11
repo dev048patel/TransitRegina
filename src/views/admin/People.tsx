@@ -8,6 +8,7 @@ import { Search } from 'lucide-react';
 import { getAllUsers } from '../../models/services/UserRegistry';
 import type { User } from '../../models/admin/AdminTypes';
 import { Badge, Card, PageHeader, btn } from '../components/admin/ui';
+import SmsRequests from './SmsRequests';
 
 const FILTERS = ['All', 'Online', 'Admins', 'Suspended'] as const;
 
@@ -27,6 +28,7 @@ export default function People() {
         <div>
             <PageHeader title="People" subtitle={users ? `${users.length} accounts` : 'Loading…'}
                 actions={<Link to="/admin/people/features" className={btn.plain}>Change a feature for everyone</Link>} />
+            <SmsRequests />
             <div className="flex flex-wrap items-center gap-3 mb-4">
                 <div className="relative flex-1 min-w-[220px]">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />

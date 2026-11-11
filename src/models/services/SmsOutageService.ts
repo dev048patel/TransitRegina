@@ -18,6 +18,7 @@ import { serviceDb, hasServiceKey } from '../lib/serverDb';
 import { SecurityEventService } from './SecurityEventService';
 import { reginaDateKey } from './ReginaTime';
 import { SITE } from '../data/legal';
+import { riderEmail, riderFrom, riderReplyTo } from './RiderEmail';
 import { smsRevokedIds } from './SmsAccessService';
 
 const sms = () => serviceDb().schema('sms');
@@ -32,18 +33,18 @@ const OFFSET_MS = 6 * 60 * 60_000;          // Regina, UTC−6 all year
 const reginaMinutes = (now: number) => { const d = new Date(now - OFFSET_MS); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
 const reginaWeekday = (now: number) => new Date(now - OFFSET_MS).getUTCDay();
 
-export interface OutageEmail { to: string; subject: string; text: string }
+export interface OutageEmail { to: string; subject: string; text: string; html?: string }
 type BatchMailer = (emails: OutageEmail[]) => Promise<void>;
 
 /** Resend's batch endpoint: up to 100 separate emails in one call, so riders never see each other's address */
 const resendBatch: BatchMailer = async emails => {
     const key = process.env.RESEND_API_KEY;
     if (!key) throw new Error('RESEND_API_KEY is not set');
-    const from = process.env.ALERT_FROM ?? 'Transit Regina Alerts <alerts@transitregina.ca>';
+    const from = riderFrom(), reply_to = riderReplyTo();   // riders' emails come from the rider address, not alerts@
     const res = await fetch('https://api.resend.com/emails/batch', {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(emails.map(e => ({ from, to: [e.to], subject: e.subject, text: e.text }))),
+        body: JSON.stringify(emails.map(e => ({ from, reply_to, to: [e.to], subject: e.subject, text: e.text, ...(e.html ? { html: e.html } : {}) }))),
         signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) throw new Error(`Resend answered ${res.status}`);
@@ -51,17 +52,20 @@ const resendBatch: BatchMailer = async emails => {
 let mailer: BatchMailer = resendBatch;
 
 /** The email from the design doc, word for word */
-export function outageEmail(date: string): { subject: string; text: string } {
+export function outageEmail(date: string): { subject: string; text: string; html: string } {
     const label = new Date(date + 'T12:00:00Z').toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
     return {
         subject: `No TransitR SMS alerts today (${label})`,
-        text: [
-            "Our text alert service is down, so you won't receive SMS alerts for your routes today.",
-            `You can still see live bus times in the TransitR app: ${SITE.url}/map`,
-            "Alerts start again tomorrow. You don't need to do anything.",
-            '',
-            `Manage alerts: ${SITE.url}/profile`,
-        ].join('\n'),
+        ...riderEmail({
+            preview: "Our text alert service is down today. Live bus times still work in the app.",
+            heading: 'No text alerts today',
+            paragraphs: [
+                `Our text alert service is down, so you won't receive SMS alerts for your routes today, ${label}.`,
+                'You can still see live bus times in the TransitR app.',
+            ],
+            button: { label: 'See live buses', url: `${SITE.url}/map` },
+            notice: { title: "You don't need to do anything.", text: 'Alerts start again tomorrow on their own.' },
+        }),
     };
 }
 
@@ -156,7 +160,7 @@ export const SmsOutageService = {
         await sms().from('alerts').update({ status: 'suppressed', updated_at: new Date(now).toISOString() }).eq('service_date', date).eq('status', 'pending');
 
         const riders = await affectedRiders(date, now);
-        const { subject, text } = outageEmail(date);
+        const { subject, text, html } = outageEmail(date);
         let emailed = 0;
         for (let i = 0; i < riders.length; i += BATCH) {
             const chunk = riders.slice(i, i + BATCH);
@@ -166,7 +170,7 @@ export const SmsOutageService = {
             const toSend = chunk.filter(r => (fresh ?? []).some(f => f.user_id === r.id));
             if (!toSend.length) continue;
             try {
-                await mailer(toSend.map(r => ({ to: r.email, subject, text })));
+                await mailer(toSend.map(r => ({ to: r.email, subject, text, html })));
                 emailed += toSend.length;
             } catch (err) {
                 // Resend refused the whole batch, so nobody in it got the email: free them for a retry

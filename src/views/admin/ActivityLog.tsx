@@ -8,12 +8,16 @@ import { apiGet } from '../../models/lib/apiClient';
 import { Badge, Card, EVENT_LABEL, PageHeader, when } from '../components/admin/ui';
 
 interface Entry { type: string; severity: 'info' | 'warning' | 'critical'; message: string; admin: string; user_id: string | null; ip: string | null; created_at: string; }
+/* Looking at someone's activity and marking events or reports handled: kept in the log, hidden unless asked for,
+   so the changes admins made stand out */
+const ROUTINE = new Set(['personal_data_viewed', 'events_handled', 'reports_handled']);
 const ACTIONS = ['user_deleted', 'role_changed', 'status_changed', 'user_updated', 'feature_access_changed', 'route_changed', 'sms_broadcast', 'sms_outage_declared', 'sms_settings_changed', 'personal_data_viewed', 'events_handled', 'note_added', 'note_deleted', 'reports_handled'];
 
 export default function ActivityLog() {
     const [rows, setRows] = useState<Entry[] | null>(null);
     const [error, setError] = useState('');
     const [q, setQ] = useState('');
+    const [showRoutine, setShowRoutine] = useState(false);
     // Kind, admin and account filter on the server (it keeps 500 at most); the text search filters what came back
     const [params, setParams] = useSearchParams();
     const kind = params.get('type') ?? 'all', admin = params.get('admin') ?? '', account = params.get('account') ?? '';
@@ -30,11 +34,13 @@ export default function ActivityLog() {
         }).catch(e => setError(e.message));
     }, [kind, admin, account]);
 
-    const shown = useMemo(() => (rows ?? []).filter(r => !q || `${r.message} ${r.admin}`.toLowerCase().includes(q.toLowerCase())), [rows, q]);
+    const routineOn = showRoutine || ROUTINE.has(kind);   // picking a routine kind in the filter shows it
+    const shown = useMemo(() => (rows ?? []).filter(r => (routineOn || !ROUTINE.has(r.type)) && (!q || `${r.message} ${r.admin}`.toLowerCase().includes(q.toLowerCase()))), [rows, q, routineOn]);
+    const hidden = (rows ?? []).length - shown.length;
 
     return (
         <div>
-            <PageHeader title="Activity log" subtitle="Every action taken by an admin. Kept for 90 days." />
+            <PageHeader title="Activity log" subtitle="Changes admins made, newest first. Kept for 90 days." />
             {error && <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">Could not load the log: {error}</p>}
             <div className="flex flex-wrap gap-3 mb-4">
                 <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search by admin, email or text" aria-label="Search the activity log"
@@ -48,6 +54,10 @@ export default function ActivityLog() {
                     {[...admins].map(([id, name]) => <option key={id} value={id}>{name}</option>)}
                 </select>
             </div>
+            <label className="inline-flex items-center gap-2 text-xs text-slate-600 mb-3 cursor-pointer">
+                <input type="checkbox" checked={routineOn} disabled={ROUTINE.has(kind)} onChange={e => setShowRoutine(e.target.checked)} />
+                Also show routine actions (looking at someone's activity, marking events handled){!routineOn && hidden > 0 ? ` · ${hidden} hidden` : ''}
+            </label>
             {account && <p className="text-sm text-slate-700 mb-3">Showing actions on one account. <button onClick={() => set('account', '')} className="font-semibold text-[#003DA5] hover:underline">Show all</button></p>}
             <Card>
                 <div className="overflow-x-auto">

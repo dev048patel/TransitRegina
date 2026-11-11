@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAdminHomeController } from '../../controllers/admin/useAdminHomeController';
-import { Card, PageHeader, Stat, when } from '../components/admin/ui';
+import { Card, PageHeader, Stat } from '../components/admin/ui';
 
 const weekday = (key: string) => new Date(key + 'T12:00:00Z').toLocaleDateString('en-CA', { weekday: 'short', timeZone: 'UTC' });
 
@@ -53,8 +53,9 @@ export default function AdminHome() {
                 <Stat label="New sign-ups" value={data?.today.signups ?? '–'} sub={data ? `${data.totals.signupsWeek} this week · ${data.totals.users} accounts in total` : undefined} />
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                <Card title="Last 7 days" className="xl:col-span-2" action={<Link to="/admin/insights" className="text-xs font-semibold text-[#003DA5] hover:underline">Full usage</Link>}>
+            <div>
+                {/* Admin actions live in the Activity log; Home keeps to what needs a look and how the app is used */}
+                <Card title="Last 7 days" action={<Link to="/admin/insights" className="text-xs font-semibold text-[#003DA5] hover:underline">Full usage</Link>}>
                     {data && !data.usageReady && <p className="mx-4 mt-3 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Run docs/security/011_usage_analytics.sql to fill this chart.</p>}
                     <div className="h-72 p-4">
                         <ResponsiveContainer width="100%" height="100%">
@@ -72,17 +73,6 @@ export default function AdminHome() {
                     </div>
                 </Card>
 
-                <Card title="Recent admin activity" action={<Link to="/admin/activity" className="text-xs font-semibold text-[#003DA5] hover:underline">See all</Link>}>
-                    <ul className="divide-y divide-slate-100">
-                        {(data?.recent ?? []).map((r, i) => (
-                            <li key={r.created_at + i} className="px-5 py-3 text-sm">
-                                <div className="text-slate-900">{r.message}</div>
-                                <div className="text-xs text-slate-500 mt-0.5">{r.admin} · {when(r.created_at)}</div>
-                            </li>
-                        ))}
-                        {data && data.recent.length === 0 && <li className="px-5 py-8 text-sm text-slate-500 text-center">No admin actions yet.</li>}
-                    </ul>
-                </Card>
             </div>
         </div>
     );

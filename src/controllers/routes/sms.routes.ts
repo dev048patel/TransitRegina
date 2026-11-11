@@ -10,6 +10,7 @@ import { TwilioService } from '../../models/services/TwilioService';
 import { SmsAccessService, smsRevokedIds } from '../../models/services/SmsAccessService';
 import { PhoneVerificationService, VerifyError, CheckResult } from '../../models/services/PhoneVerificationService';
 import { recordServerEvent } from '../../models/services/UsageEvents';
+import { toStoredPhone } from '../../models/lib/phone';
 
 const router = Router();
 
@@ -23,15 +24,14 @@ const CANADIAN_AREA_CODES = new Set([
     780, 782, 807, 819, 825, 867, 873, 879, 902, 905, 942,
 ].map(String));
 
-/** A Canadian mobile in "+1XXXXXXXXXX" or "+1 XXX-XXX-XXXX" form */
+/** A Canadian mobile, typed or stored in any form (306-555-0199, +1 306-555-0199, +13065550199) */
 export function isValidPhone(phone: string): boolean {
-    const m = NANP_E164.exec(phone.replace(/[\s\-().]/g, ''));
+    const m = NANP_E164.exec(toStoredPhone(phone) ?? '');
     return !!m && CANADIAN_AREA_CODES.has(m[1]);
 }
 
-function normalisePhone(phone: string): string {
-    return phone.replace(/[\s\-().]/g, '');
-}
+/** The stored form, +13065550199 (lib/phone); isValidPhone has checked it first */
+const normalisePhone = (phone: string): string => toStoredPhone(phone) ?? phone;
 
 // ── POST /api/sms/opt-in ────────────────────────────────────────────────────
 // Marks the authenticated user as opted in to SMS departure reminders.
@@ -91,7 +91,7 @@ router.post('/access/request', requireAuth, rateLimit('sms-access-request', 5), 
         const status = await SmsAccessService.status(userId);
         if (status === 'approved') { res.json({ status }); return; }
         if (status === 'declined') { res.status(403).json({ error: 'Text alerts are not available on your account. Contact us if you think this is a mistake.' }); return; }
-        await SmsAccessService.request(userId, [profile.full_name, profile.email].filter(Boolean).join(', ') || 'A rider');
+        await SmsAccessService.request(userId, { name: profile.full_name, email: profile.email });
         recordServerEvent(userId, 'sms_access_requested');
         res.json({ status: 'pending' });
     } catch (err) {
@@ -119,7 +119,7 @@ router.patch('/phone', requireAuth, async (req: Request, res: Response) => {
     const { phone } = req.body as { phone?: string };
     if (!phone) { res.status(400).json({ error: 'phone is required' }); return; }
     if (!isValidPhone(phone)) {
-        res.status(400).json({ error: 'Enter a valid Canadian number (+1 XXX-XXX-XXXX)' });
+        res.status(400).json({ error: 'Enter a valid Canadian mobile number, like 306-555-0199' });
         return;
     }
 
@@ -138,7 +138,7 @@ async function savedPhone(req: Request, res: Response): Promise<{ saved: string;
     const { data: profile, error } = await userDb(req.user!.token).from('profiles').select('mobile_number, mobile_verified').eq('id', req.user!.id).single();
     if (error) { res.status(500).json({ error: 'Failed to fetch profile' }); return null; }
     if (!profile?.mobile_number) { res.status(400).json({ error: 'Add a phone number to your profile first' }); return null; }
-    if (!isValidPhone(profile.mobile_number)) { res.status(400).json({ error: 'Text alerts are only for Canadian mobile numbers. Enter one (+1 XXX-XXX-XXXX) in your profile first.' }); return null; }
+    if (!isValidPhone(profile.mobile_number)) { res.status(400).json({ error: 'Text alerts are only for Canadian mobile numbers. Enter one (like 306-555-0199) in your profile first.' }); return null; }
     return { saved: profile.mobile_number, phone: normalisePhone(profile.mobile_number), verified: !!profile.mobile_verified };
 }
 

@@ -14,6 +14,7 @@
 import { supabase } from '../lib/supabase';
 import { apiDelete, apiPost } from '../lib/apiClient';
 import { SITE } from '../data/legal';
+import { phoneDigits, toStoredPhone } from '../lib/phone';
 import { track } from './UsageTracker';
 import type {
     LoginFormData,
@@ -25,7 +26,6 @@ import type {
 /* ── Validation helpers (private) ────────────────────────────────── */
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MOBILE_REGEX = /^\+1 \d{3}-\d{3}-\d{4}$/;
 
 /* ── Public API ──────────────────────────────────────────────────── */
 
@@ -68,8 +68,8 @@ export function validateSignup(data: SignupFormData): Record<string, string> {
     if (data.password.length < 8) errs.password = 'Minimum 8 characters required';
 
     // Mobile is optional — only validate when provided
-    if (data.mobile && !MOBILE_REGEX.test(data.mobile)) {
-        errs.mobile = 'Enter a valid Canadian number (+1 XXX-XXX-XXXX)';
+    if (data.mobile && phoneDigits(data.mobile).length !== 10) {
+        errs.mobile = 'Enter your 10-digit number, like 306-555-0199';
     }
 
     if (!data.agreedToTerms) errs.terms = 'Please agree to the Terms of Use and Privacy Policy to create an account';
@@ -99,19 +99,6 @@ export function getPasswordStrength(pw: string): PasswordStrength {
     return { score: s, ...map[s] };
 }
 
-/**
- * Format a raw string into a Canadian phone number: +1 XXX-XXX-XXXX.
- * Strips non-digits, caps at 11 digits (country code + 10).
- */
-export function formatMobile(raw: string): string {
-    const d = raw.replace(/\D/g, '').slice(0, 11);
-
-    if (!d) return '';
-    if (d.length <= 1) return `+${d}`;
-    if (d.length <= 4) return `+${d[0]} ${d.slice(1)}`;
-    if (d.length <= 7) return `+${d[0]} ${d.slice(1, 4)}-${d.slice(4)}`;
-    return `+${d[0]} ${d.slice(1, 4)}-${d.slice(4, 7)}-${d.slice(7)}`;
-}
 
 /**
  * Email a password-reset link. The link signs the user in and lands on /reset-password.
@@ -137,7 +124,7 @@ export async function signUpUser(data: SignupFormData): Promise<SignupResult> {
         options: {
             data: {
                 full_name: data.fullName.trim(),
-                mobile_number: data.mobile || null,
+                mobile_number: toStoredPhone(data.mobile),   // stored as +13065550199 (lib/phone)
                 /* Record of what they agreed to, and when */
                 terms_version: SITE.TERMS_VERSION,
                 terms_accepted_at: new Date().toISOString(),

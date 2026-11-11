@@ -18,7 +18,7 @@ import { supabase } from '../lib/supabase';
 import { twoStepTimeOf, TWO_STEP_MAX_SECONDS, type User } from '../auth/AuthModel';
 import { fetchAgreedTermsVersion } from '../services/AuthService';
 import { recordLogout } from '../services/UserRegistry';
-import { formatMobile } from '../services/AuthService';
+import { toStoredPhone } from '../lib/phone';
 import { apiPost } from '../lib/apiClient';
 import { track, trackNow } from '../services/UsageTracker';
 
@@ -156,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (/^\+?\d/.test(email)) {
             let tokens: { access_token: string; refresh_token: string };
             try {
-                tokens = await (await apiPost('/api/auth/login-mobile', { mobile: formatMobile(email), password })).json();
+                tokens = await (await apiPost('/api/auth/login-mobile', { mobile: toStoredPhone(email) ?? email, password })).json();
             } catch (e) {
                 return (e as { status?: number }).status === 401 ? 'Invalid credentials. Please try again.' : 'Mobile login is not available right now. Please use your email.';
             }

@@ -101,7 +101,8 @@ const fake = http.createServer((req, res) => {
             return send(200, [...known.values()].filter(k => url.includes(k.id)));
         }
         if (url.startsWith('/rest/v1/security_events') && req.method === 'GET') return send(200, storedEvents);
-        if (url.startsWith('/rest/v1/rpc/get_email_by_mobile')) return send(200, body?.mobile === '+1 306-555-0199' ? 'rider@example.com' : null);
+        // The real function compares digits only (010_sms_and_admin_fixes.sql)
+        if (url.startsWith('/rest/v1/rpc/get_email_by_mobile')) return send(200, String(body?.mobile ?? '').replace(/\D/g, '') === '13065550199' ? 'rider@example.com' : null);
         if (req.method === 'GET' || req.method === 'HEAD') return single ? send(406, { message: 'no rows' }) : send(200, []);
         return send(req.method === 'POST' ? 201 : 200, []);
     });
@@ -314,6 +315,10 @@ test('a reason given for an action is kept in the log', async () => {
 });
 
 test('marking events as handled updates only those events, keeps them, and is recorded', async () => {
+    assert.equal((await api('POST', '/api/admin/security/handled', { token: T.admin, body: { ids: [7] } })).status, 200);
+    assert.ok(!events.recent().some(e => e.type === 'events_handled'), 'marking nothing new is not logged');
+    calls.length = 0;
+    answer = (method, url) => method === 'PATCH' && url.startsWith('/rest/v1/security_events') ? [{ id: 7 }, { id: 9 }] : undefined;
     assert.equal((await api('POST', '/api/admin/security/handled', { token: T.admin, body: { ids: [7, 9] } })).status, 200);
     const write = calls.find(c => c.method === 'PATCH' && c.url.startsWith('/rest/v1/security_events'));
     assert.ok(write && /id=in\.(%28|\()7(%2C|,)9/.test(write.url), 'only the chosen events');
@@ -354,7 +359,8 @@ test('the overview reports live numbers, a seven-day trend and anything needing 
     const r = await api('GET', '/api/admin/overview', { token: T.admin });
     assert.equal(r.status, 200);
     assert.equal(r.json.trend.length, 7);
-    for (const k of ['live', 'today', 'totals', 'attention', 'recent']) assert.ok(k in r.json, k);
+    for (const k of ['live', 'today', 'totals', 'attention']) assert.ok(k in r.json, k);
+    assert.ok(!('recent' in r.json), 'admin actions are in the Activity log, not on Home');
 });
 
 /* ── public endpoints ── */
@@ -726,7 +732,10 @@ test('text alerts need approval: a rider without it cannot turn them on', async 
 
 const askingRider = { full_name: 'Riley Rider', email: 'riley@example.com', mobile_number: '+13065550111', mobile_verified: true };
 
-test('a verified rider asks for text alerts: the request waits, consent is recorded and the admins get one email', async () => {
+test('a verified rider asks for text alerts: the request waits, consent is recorded, and the admins and the rider each get one email', async () => {
+    const riderMails: { to: string; subject: string; text: string; html: string }[] = [];
+    const { SmsAccessService } = await import('../src/models/services/SmsAccessService');
+    SmsAccessService._setMailer(async (to, subject, body) => { riderMails.push({ to, subject, text: body.text, html: body.html }); });
     let asked = false;
     answer = (method, url) => {
         if (method === 'GET' && url.startsWith('/rest/v1/profiles') && url.includes('mobile_verified')) return [askingRider];
@@ -747,9 +756,15 @@ test('a verified rider asks for text alerts: the request waits, consent is recor
     assert.match(mails[0].subject, /Text alert request from Riley Rider/);
     assert.equal((await api('GET', '/api/sms/access', { token: T.user })).json.status, 'pending');
 
+    assert.equal(riderMails.length, 1);
+    assert.deepEqual([riderMails[0].to, riderMails[0].subject], ['riley@example.com', 'We got your request for text alerts']);
+    assert.match(riderMails[0].text, /review your request soon/);
+
     await api('POST', '/api/sms/access/request', { token: T.user });   // asks again
     await settle();
     assert.equal(mails.length, 1, 'the admins are told once');
+    assert.equal(riderMails.length, 1, 'and so is the rider');
+    SmsAccessService._setMailer(null);
 });
 
 test('asking for text alerts needs a verified phone, and a declined rider cannot ask again', async () => {
@@ -766,9 +781,9 @@ test('asking for text alerts needs a verified phone, and a declined rider cannot
 });
 
 test('an admin approves a request: texts turn on, the rider is emailed, and it is logged', async () => {
-    const riderMails: { to: string; subject: string; text: string }[] = [];
+    const riderMails: { to: string; subject: string; text: string; html: string }[] = [];
     const { SmsAccessService } = await import('../src/models/services/SmsAccessService');
-    SmsAccessService._setMailer(async (to, subject, text) => { riderMails.push({ to, subject, text }); });
+    SmsAccessService._setMailer(async (to, subject, body) => { riderMails.push({ to, subject, text: body.text, html: body.html }); });
     try {
         answer = (method, url) => {
             if (method === 'DELETE' && url.startsWith('/rest/v1/sms_access_requests')) return [{ user_id: USER }];
@@ -784,9 +799,11 @@ test('an admin approves a request: texts turn on, the rider is emailed, and it i
         assert.equal(optIn.body.sms_opted_in, true);
         assert.match(decodeURIComponent(optIn.url), /mobile_verified=eq\.true/, 'only a verified number');
         assert.equal(riderMails.length, 1);
-        assert.deepEqual([riderMails[0].to, riderMails[0].subject], ['riley@example.com', 'Your text alerts are approved']);
+        assert.deepEqual([riderMails[0].to, riderMails[0].subject], ['riley@example.com', 'Your account is ready for text alerts']);
+        assert.match(riderMails[0].text, /ready to use them\. Enjoy!/);
         assert.match(riderMails[0].text, /request for text alerts has been accepted/);
         assert.match(riderMails[0].text, /306-555-0111/);
+        assert.match(riderMails[0].html, /email-logo\.gif/, 'the branded design');
         await settle();
         assert.ok(events.recent().some(e => e.type === 'feature_access_changed' && /approved text alerts/.test(e.message) && e.userId === ADMIN));
     } finally { SmsAccessService._setMailer(null); }
@@ -818,15 +835,47 @@ test('text alerts have no switch for everyone, and resetting a person keeps thei
     assert.match(decodeURIComponent(reset.url), /feature=neq\.sms_alerts/);
 });
 
-test('the admins see who is waiting, and the home page flags it', async () => {
+test('rider emails use the branded design, come from the rider address, and cannot be broken by a name', async () => {
+    const { riderEmail, riderFrom, riderReplyTo } = await import('../src/models/services/RiderEmail');
+    const e = riderEmail({ preview: 'Preview line', heading: 'Your request is in', greeting: 'Hi <img src=x onerror=alert(1)>,', paragraphs: ['First & second'],
+        button: { label: 'Open', url: 'https://transitregina.ca/map' }, list: { title: 'What happens next:', items: [{ icon: '👀', title: 'Step one', text: 'We look.' }] } });
+    assert.match(e.html, /src="https:\/\/transitregina\.ca\/email-logo\.gif"/, 'the animated logo');
+    assert.match(e.html, /alt="Transit Regina"/, 'readable with images off');
+    assert.ok(!e.html.includes('<img src=x'), 'a name cannot add HTML');
+    assert.match(e.html, /Hi &lt;img src=x onerror=alert\(1\)&gt;,/);
+    assert.match(e.html, /First &amp; second/);
+    assert.match(e.html, /href="https:\/\/transitregina\.ca\/map"/);
+    assert.match(e.text, /^Your request is in\n\nHi <img src=x onerror=alert\(1\)>,\n\nFirst & second\n\nOpen: https:\/\/transitregina\.ca\/map\n\nWhat happens next:\n- Step one: We look\./, 'a plain-text copy for every email');
+    assert.match(e.html, /v:roundrect/, 'the button works in Outlook too');
+    assert.equal(riderFrom(), 'Transit Regina <noreply@transitregina.ca>');
+    assert.equal(riderReplyTo(), 'transitregina.ca@gmail.com', 'replies reach a person');
+    assert.doesNotMatch(riderFrom(), /alerts@/);
+});
+
+test('the Text alerts page shows who is waiting (with what an admin needs to decide), approved and declined', async () => {
     answer = (method, url) => {
         if (method === 'GET' && url.startsWith('/rest/v1/sms_access_requests')) return [{ user_id: USER, requested_at: '2026-11-10T15:00:00Z' }];
-        if (method === 'GET' && url.startsWith('/rest/v1/profiles') && url.includes('mobile_number')) return [{ id: USER, full_name: 'Riley Rider', email: 'riley@example.com', mobile_number: '+13065550111' }];
+        if (method === 'GET' && url.startsWith('/rest/v1/feature_access') && url.includes('updated_by')) return [
+            { user_id: OTHER, enabled: true, updated_at: '2026-11-09T15:00:00Z', updated_by: ADMIN },
+            { user_id: NEWCOMER, enabled: false, updated_at: '2026-11-08T15:00:00Z', updated_by: ADMIN },
+        ];
+        if (method === 'GET' && url.startsWith('/rest/v1/profiles') && url.includes('last_active')) return [
+            { id: USER, full_name: 'Riley Rider', email: 'riley@example.com', mobile_number: '+13065550111', mobile_verified: true, sms_opted_in: false, account_status: 'active', created_at: '2026-10-01T00:00:00Z', last_active: '2026-11-10T14:00:00Z' },
+            { id: OTHER, full_name: 'Olly Other', email: 'olly@example.com', mobile_number: '+13065550122', mobile_verified: true, sms_opted_in: true, account_status: 'active', created_at: '2026-09-01T00:00:00Z', last_active: null },
+            { id: ADMIN, full_name: 'Ada Admin', email: 'ada@example.com' },
+        ];
+        if (method === 'GET' && url.startsWith('/rest/v1/weekly_schedules')) return [
+            { user_id: USER, day_of_week: 1, enabled: true, arrive_by: '08:30:00', depart_by: null },
+            { user_id: USER, day_of_week: 6, enabled: false, arrive_by: '10:00:00', depart_by: null },
+        ];
         return undefined;
     };
     const r = await api('GET', '/api/admin/sms/requests', { token: T.viewer });
     assert.equal(r.status, 200);
-    assert.deepEqual(r.json.requests, [{ userId: USER, requestedAt: '2026-11-10T15:00:00Z', name: 'Riley Rider', email: 'riley@example.com', phone: '+13065550111' }]);
+    assert.deepEqual(r.json.pending, [{ userId: USER, at: '2026-11-10T15:00:00Z', name: 'Riley Rider', email: 'riley@example.com', phone: '+13065550111', phoneVerified: true, textsOn: false,
+        accountStatus: 'active', joined: '2026-10-01T00:00:00Z', lastActive: '2026-11-10T14:00:00Z', decidedBy: null, commutes: [{ day: 1, arriveBy: '08:30', departBy: null }] }]);
+    assert.deepEqual(r.json.approved.map((x: any) => [x.userId, x.decidedBy, x.textsOn]), [[OTHER, 'Ada Admin', true]]);
+    assert.deepEqual(r.json.declined.map((x: any) => x.userId), [NEWCOMER]);
     assert.equal((await api('GET', '/api/admin/sms/requests', { token: T.user })).status, 403, 'riders cannot see the list');
 });
 
@@ -1054,7 +1103,8 @@ test('an admin can turn text alerts off for the day: riders with alerts ahead ge
         assert.equal(sent.length, 1);
         assert.equal(sent[0].to, `user-${USER.slice(0, 4)}@example.com`);
         assert.match(sent[0].subject, /^No TransitR SMS alerts today \(\w+day, \w+ \d+\)$/);
-        assert.match(sent[0].text, /You can still see live bus times in the TransitR app: https:\/\/transitregina\.ca\/map/);
+        assert.match(sent[0].text, /You can still see live bus times in the TransitR app\.[\s\S]*See live buses: https:\/\/transitregina\.ca\/map/);
+        assert.match(sent[0].html ?? '', /href="https:\/\/transitregina\.ca\/map"/, 'the branded design, with a button to the map');
         const notice = calls.findIndex(c => c.url.startsWith('/rest/v1/outage_notices') && c.method === 'POST');
         assert.ok(notice >= 0 && notice < sent[0].at, 'the notice row is written before the email is sent');
         await settle();
@@ -1100,12 +1150,32 @@ test('the SMS service going quiet during alert hours is declared an outage autom
 
 /* ── Fraud and crowd protections (Nov 2026 review) ── */
 
+test('one rule for phone numbers: stored +1XXXXXXXXXX, shown XXX-XXX-XXXX, typed without the +1', async () => {
+    const { toStoredPhone, formatPhone, formatPhoneInput, phoneDigits } = await import('../src/models/lib/phone');
+    for (const typed of ['306-201-5465', '3062015465', '(306) 201 5465', '+1 306-201-5465', '+13062015465', '1 306 201 5465'])
+        assert.deepEqual([toStoredPhone(typed), formatPhone(typed)], ['+13062015465', '306-201-5465'], typed);
+    for (const bad of ['306-201-546', '23062015465', '+44 20 7946 0958', '', null])
+        assert.equal(toStoredPhone(bad as string | null), null, String(bad));
+    assert.deepEqual(['3', '306', '3062', '306201', '3062015', '3062015465', '30620154659'].map(formatPhoneInput),
+        ['3', '306', '306-2', '306-201', '306-201-5', '306-201-5465', '306-201-5465'], 'formats while typing, at most 10 digits');
+    assert.equal(formatPhoneInput('+1 306-201-5465'), '306-201-5465', 'a pasted +1 is dropped (it is fixed in front of the box)');
+    assert.equal(phoneDigits('+1 306-201-5465'), phoneDigits('3062015465'), 'the same number in any format is the same number');
+});
+
+test('phone sign-in works however the number is typed', async () => {
+    for (const mobile of ['306-555-0199', '3065550199', '+1 (306) 555-0199'])
+        assert.equal((await api('POST', '/api/auth/login-mobile', { body: { mobile, password: 'correct-password' } })).status, 200, mobile);
+    const lookup = calls.filter(c => c.url.startsWith('/rest/v1/rpc/get_email_by_mobile')).map(c => c.body.mobile);
+    assert.deepEqual([...new Set(lookup)], ['+13065550199'], 'looked up in the stored form');
+});
+
 test('only Canadian mobile numbers can get texts', async () => {
     const { isValidPhone } = await import('../src/controllers/routes/sms.routes');
-    for (const ok of ['+13065550111', '+1 306-555-0111', '+1 (639) 555-0111', '+14165550111', '+16045550111', '+18675550111'])
+    // The +1 is fixed (lib/phone), so the 10 digits on their own count too
+    for (const ok of ['+13065550111', '+1 306-555-0111', '+1 (639) 555-0111', '+14165550111', '+16045550111', '+18675550111', '3065550111', '306-555-0111'])
         assert.equal(isValidPhone(ok), true, ok);
     // US and Caribbean +1 numbers are where SMS-pumping fraud sends paid texts
-    for (const bad of ['+12125550111', '+18765550111', '+12845550111', '+16495550111', '+1306555011', '+443065550111', '3065550111', ''])
+    for (const bad of ['+12125550111', '+18765550111', '+12845550111', '+16495550111', '+1306555011', '+443065550111', '306555011', '212-555-0111', ''])
         assert.equal(isValidPhone(bad), false, bad);
 });
 

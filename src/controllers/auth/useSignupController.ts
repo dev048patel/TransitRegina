@@ -9,10 +9,10 @@
 
 import { useState, useCallback } from 'react';
 import type { PasswordStrength } from '../../models/auth/AuthModel';
+import { formatPhoneInput } from '../../models/lib/phone';
 import {
     validateSignup,
     getPasswordStrength,
-    formatMobile,
     signUpUser,
 } from '../../models/services/AuthService';
 
@@ -49,9 +49,9 @@ export function useSignupController(): SignupControllerOutput {
 
     const toggleShowPw = useCallback(() => setShowPw(v => !v), []);
 
-    // Format mobile via AuthService
+    // The box shows 306-555-0199 (the +1 in front is fixed); it is stored as +13065550199 on sign-up
     const handleMobileChange = useCallback((raw: string) => {
-        setMobile(formatMobile(raw));
+        setMobile(formatPhoneInput(raw));
     }, []);
 
     const handleSubmit = useCallback(async (e: React.FormEvent) => {

@@ -69,7 +69,7 @@ router.get('/overview', async (_req: Request, res: Response) => {
     const today = startOfReginaDay(0).toISOString(), weekAgo = startOfReginaDay(-6).toISOString();
     const head = { count: 'exact' as const, head: true };
 
-    const [activeNow, signedInNow, visitorsToday, totalUsers, signupsToday, signupsWeek, criticalDay, week, recent, buses, openReports, smsRequests] = await Promise.all([
+    const [activeNow, signedInNow, visitorsToday, totalUsers, signupsToday, signupsWeek, criticalDay, week, buses, openReports, smsRequests] = await Promise.all([
         countOf(db.from('visitor_sessions').select('*', head).gte('last_seen', fiveMinAgo)),
         countOf(db.from('profiles').select('*', head).gte('last_active', fiveMinAgo)),
         countOf(db.from('visitor_sessions').select('*', head).gte('last_seen', today)),
@@ -79,7 +79,6 @@ router.get('/overview', async (_req: Request, res: Response) => {
         unhandledCriticalSince(dayAgo),
         // Counted in the database by Regina day (script 011): reading rows through the API stops at 1,000
         db.rpc('usage_days', { p_from: weekAgo, p_to: startOfReginaDay(1).toISOString() }),
-        db.from('security_events').select('type, severity, message, user_id, created_at').in('type', ADMIN_ACTIONS).order('created_at', { ascending: false }).limit(8),
         RealTimeService.getLiveBuses().then(b => b.length).catch(() => null),
         countOf(db.from('rider_reports').select('*', head).is('handled_at', null)),   // 0 before script 012
         countOf(db.from('sms_access_requests').select('*', head)),   // 0 before script 013
@@ -97,7 +96,7 @@ router.get('/overview', async (_req: Request, res: Response) => {
         ...(criticalDay ? [{ level: 'critical', text: `${criticalDay} critical security event${criticalDay === 1 ? '' : 's'} in the last 24 hours`, link: '/admin/security' }] : []),
         ...health.config.map(text => ({ level: 'warning', text, link: '/admin/security' })),
         ...(openReports ? [{ level: 'warning', text: `${openReports} open rider report${openReports === 1 ? '' : 's'}`, link: '/admin/reports' }] : []),
-        ...(smsRequests ? [{ level: 'warning', text: `${smsRequests} rider${smsRequests === 1 ? '' : 's'} waiting for text alert approval`, link: '/admin/people' }] : []),
+        ...(smsRequests ? [{ level: 'warning', text: `${smsRequests} rider${smsRequests === 1 ? '' : 's'} waiting for text alert approval`, link: '/admin/text-alerts' }] : []),
     ];
 
     res.json({
@@ -106,7 +105,6 @@ router.get('/overview', async (_req: Request, res: Response) => {
         today: { visitors: visitorsToday, searches: todayRow.searches, trips: todayRow.trips, signups: signupsToday },
         totals: { users: totalUsers, signupsWeek },
         trend, attention, usageReady: !week.error,
-        recent: await withPeople(recent.data ?? []),
     });
 });
 
@@ -345,7 +343,7 @@ router.post('/reports/handled', requireAdmin, async (req: Request, res: Response
     if (!Array.isArray(ids) || !ids.length || ids.length > 300 || !ids.every(n => Number.isInteger(n) && n > 0)) { reject(req, res, 'Invalid report list'); return; }
     const { data, error } = await serviceDb().from('rider_reports').update({ handled_at: new Date().toISOString(), handled_by: req.user!.id }).in('id', ids).is('handled_at', null).select('id');
     if (error) { console.error('[Admin] Reports handled error:', error.message); res.status(500).json({ error: 'Could not update the reports' }); return; }
-    await audit(req, 'reports_handled', `Admin marked ${data?.length ?? 0} rider report${data?.length === 1 ? '' : 's'} as handled`);
+    if (data?.length) await audit(req, 'reports_handled', `Admin marked ${data?.length ?? 0} rider report${data?.length === 1 ? '' : 's'} as handled`);
     res.json({ handled: data?.length ?? 0 });
 });
 
@@ -519,7 +517,7 @@ async function decideSms(req: Request, res: Response, userId: string, approve: b
 }
 
 router.get('/sms/requests', async (_req: Request, res: Response) => {
-    try { res.json({ setup: true, requests: await SmsAccessService.pending() }); }
+    try { res.json({ setup: true, ...await SmsAccessService.overview() }); }
     catch (err) {
         if (notSetUp(err as { code?: string })) { res.json({ setup: false, requests: [] }); return; }
         console.error('[Admin] Text alert requests error:', (err as Error).message);
@@ -560,7 +558,7 @@ router.post('/security/handled', requireAdmin, async (req: Request, res: Respons
     const { data, error } = await serviceDb().from('security_events')
         .update({ handled_at: new Date().toISOString(), handled_by: req.user!.id }).in('id', ids).is('handled_at', null).select('id');
     if (error) { console.error('[Admin] Mark handled error:', error.message); res.status(500).json({ error: 'Could not update the events. Has script 003 been run?' }); return; }
-    await audit(req, 'events_handled', `Admin marked ${data?.length ?? 0} security event${data?.length === 1 ? '' : 's'} as handled`);
+    if (data?.length) await audit(req, 'events_handled', `Admin marked ${data?.length ?? 0} security event${data?.length === 1 ? '' : 's'} as handled`);
     res.json({ handled: data?.length ?? 0 });
 });
 

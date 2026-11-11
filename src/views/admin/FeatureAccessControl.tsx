@@ -4,6 +4,9 @@ import { Search, RefreshCw, CheckCircle } from 'lucide-react';
 import { useFeatureAccessController, GlobalFeatureState } from '../../controllers/admin/useFeatureAccessController';
 import { FEATURES, FeatureKey } from '../../models/admin/FeatureAccessTypes';
 import { useAuth } from '../../models/context/AuthContext';
+
+/* Text alerts are approved one rider at a time on their own page (Text alerts), so they aren't switched here */
+const SWITCHABLE = FEATURES.filter(f => f.key !== 'sms_alerts');
 import { Navigate } from 'react-router-dom';
 
 interface ToggleProps {
@@ -83,8 +86,7 @@ export default function FeatureAccessControl() {
             <div className="bg-white rounded-lg border border-slate-200 p-4">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">Global Switches</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                    {/* Text alerts are approved one rider at a time, so they have no global switch */}
-                    {FEATURES.filter(f => f.key !== 'sms_alerts').map(f => {
+                                        {SWITCHABLE.map(f => {
                         const gState: GlobalFeatureState = ctrl.globalFeatureState[f.key];
                         const isOn = gState === 'on';
                         const isMixed = gState === 'mixed';
@@ -131,7 +133,7 @@ export default function FeatureAccessControl() {
                         <thead className="bg-slate-50 border-b border-slate-100">
                             <tr>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">User</th>
-                                {FEATURES.map(f => (
+                                {SWITCHABLE.map(f => (
                                     <th key={f.key} className="px-3 py-2 text-center text-xs font-medium text-slate-500 min-w-[90px]">
                                         {f.label}
                                     </th>
@@ -142,7 +144,7 @@ export default function FeatureAccessControl() {
                         <tbody className="divide-y divide-slate-50">
                             {ctrl.filteredUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={FEATURES.length + 2} className="px-4 py-8 text-center text-slate-400 text-sm">
+                                    <td colSpan={SWITCHABLE.length + 2} className="px-4 py-8 text-center text-slate-400 text-sm">
                                         {ctrl.search ? 'No users match.' : 'No users found.'}
                                     </td>
                                 </tr>
@@ -162,7 +164,7 @@ export default function FeatureAccessControl() {
                                                     </div>
                                                 </div>
                                             </td>
-                                            {FEATURES.map(f => {
+                                            {SWITCHABLE.map(f => {
                                                 const enabled = u.access[f.key as FeatureKey];
                                                 const savingThis = ctrl.saving === `${u.userId}:${f.key}`;
                                                 return (

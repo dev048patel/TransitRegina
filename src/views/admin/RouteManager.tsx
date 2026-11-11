@@ -2,7 +2,7 @@
  * RouteManager.tsx — Transit Regina  [VIEW — MVC]
  *
  * Shows all Regina Transit routes loaded from the static dataset.
- * Columns: Route Id/Bus No. · Route Name · Status · Total Stops · Last Updated · Actions
+ * Columns: Route Id/Bus No. · Route Name · Status · Actions
  * Actions: Rename · Show/Hide
  */
 
@@ -72,8 +72,6 @@ export default function RouteManager() {
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Route Id</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Route Name</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Total Stops</th>
-                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Last Updated</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
@@ -83,8 +81,6 @@ export default function RouteManager() {
                                     <td className="px-6 py-3 font-bold text-gray-900 text-sm">{route.route_num}</td>
                                     <td className="px-6 py-3 text-sm text-gray-800">{route.route_name}</td>
                                     <td className="px-6 py-3"><StatusBadge status={route.status} /></td>
-                                    <td className="px-6 py-3 text-sm text-gray-500 text-center">—</td>
-                                    <td className="px-6 py-3 text-sm text-gray-500">{route.last_updated}</td>
                                     <td className="px-6 py-3">
                                         <div className="flex items-center gap-2">
                                             <button
@@ -110,7 +106,7 @@ export default function RouteManager() {
                             ))}
                             {routes.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center text-gray-400 text-sm">
+                                    <td colSpan={4} className="px-6 py-12 text-center text-gray-400 text-sm">
                                         No routes match your search.
                                     </td>
                                 </tr>

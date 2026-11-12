@@ -61,11 +61,7 @@ const RouteManager = React.lazy(() => import('./views/admin/RouteManager'));
 const FeatureAccessControl = React.lazy(() => import('./views/admin/FeatureAccessControl'));
 const SecurityCenter = React.lazy(() => import('./views/admin/SecurityCenter'));
 const TwoStepPage = React.lazy(() => import('./views/auth/TwoStepPage'));
-/* The route and stop directory: one chunk, loaded only on those pages (it carries the stop data) */
-const RoutesIndexPage = React.lazy(() => import('./views/directory/DirectoryPages').then(m => ({ default: m.RoutesIndexPage })));
-const RoutePage = React.lazy(() => import('./views/directory/DirectoryPages').then(m => ({ default: m.RoutePage })));
-const StopPage = React.lazy(() => import('./views/directory/DirectoryPages').then(m => ({ default: m.StopPage })));
-const NotFoundPage = React.lazy(() => import('./views/directory/DirectoryPages').then(m => ({ default: m.NotFoundPage })));
+const NotFoundPage = React.lazy(() => import('./views/NotFoundPage'));
 
 /**
  * AppRoutes — renders all routes ONLY after auth state has been resolved.
@@ -205,10 +201,10 @@ function AppRoutes() {
                 <Route path="/privacy" element={<LegalPage page="privacy" />} />
                 <Route path="/terms" element={<LegalPage page="terms" />} />
 
-                {/* ── Public: every bus route and stop, as pages search engines can find ── */}
-                <Route path="/routes" element={<RoutesIndexPage />} />
-                <Route path="/routes/:slug" element={<RoutePage />} />
-                <Route path="/stops/:slug" element={<StopPage />} />
+                {/* ── Old route and stop pages: retired, they go to the homepage (vercel.json redirects them too) ── */}
+                <Route path="/routes" element={<Navigate to="/" replace />} />
+                <Route path="/routes/:slug" element={<Navigate to="/" replace />} />
+                <Route path="/stops/:slug" element={<Navigate to="/" replace />} />
 
                 {/* ── Old address: /landing now points to the homepage ── */}
                 <Route path="/landing" element={<Navigate to="/" replace />} />

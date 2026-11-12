@@ -8,13 +8,12 @@
  - in the browser, usePageMeta updates the document as people move around the app (applyPageMeta).
 */
 import { SITE } from '../data/legal';
-import type { RouteInfo, StopInfo } from '../services/TransitDirectory';
 
 export const SITE_URL = 'https://transitregina.ca';
 const OG_IMAGE = `${SITE_URL}/og-logo.jpg`;
 
 export interface PageMeta {
-    /** Path only, e.g. "/routes/4-hillsdale-walsh-acres" */
+    /** Path only, e.g. "/about" */
     path: string;
     title: string;
     description: string;
@@ -24,10 +23,6 @@ export interface PageMeta {
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const crumbs = (items: [string, string][]) => ({
-    '@context': 'https://schema.org', '@type': 'BreadcrumbList',
-    itemListElement: items.map(([name, path], i) => ({ '@type': 'ListItem', position: i + 1, name, item: SITE_URL + path })),
-});
 
 /* ── Pages ── */
 export const HOME_META: PageMeta = {
@@ -47,13 +42,6 @@ export const HOME_META: PageMeta = {
     }],
 };
 
-export const ROUTES_META: PageMeta = {
-    path: '/routes',
-    title: 'All Regina Bus Routes: Live Maps & Stops | Transit Regina',
-    description: 'Every Regina bus route with a map, every stop in order both ways, and the routes you can change to. Tap any route to see its buses live.',
-    jsonLd: [crumbs([['Home', '/'], ['Bus routes', '/routes']])],
-};
-
 export const MAP_META: PageMeta = {
     path: '/map',
     title: 'Live Regina Bus Map: Where Is My Bus? | Transit Regina',
@@ -61,36 +49,6 @@ export const MAP_META: PageMeta = {
     // Sign-in only, so search engines only ever see the login page here
     noindex: true,
 };
-
-export function routeMeta(r: RouteInfo): PageMeta {
-    const path = `/routes/${r.slug}`;
-    const ends = r.directions[0] ? ` between ${r.name.replace(' – ', ' and ')}` : '';
-    return {
-        path,
-        title: `Route ${r.num} ${r.name}: Live Bus Map & Stops | Transit Regina`,
-        description: `Where is the route ${r.num} bus right now? See route ${r.num}${ends} live, all ${r.stopCount} stops in order both ways, and where to change to other Regina buses.`,
-        jsonLd: [crumbs([['Home', '/'], ['Bus routes', '/routes'], [`Route ${r.num} ${r.name}`, path]])],
-    };
-}
-
-export function stopMeta(s: StopInfo): PageMeta {
-    const path = `/stops/${s.slug}`;
-    const routes = s.routes.map(r => r.route.num).filter((n, i, a) => a.indexOf(n) === i);
-    const served = routes.length ? `Served by route${routes.length > 1 ? 's' : ''} ${routes.join(', ')}.` : '';
-    return {
-        path,
-        title: `Bus Stop ${s.id}: ${s.name}${s.direction ? ` (${s.direction})` : ''} | Transit Regina`,
-        description: `Live arrivals at Regina bus stop ${s.id}, ${s.name}${s.direction ? `, ${s.direction.toLowerCase()}` : ''}. ${served} See where each bus is heading and the stops nearby.`,
-        jsonLd: [
-            crumbs([['Home', '/'], ['Bus routes', '/routes'], [`Stop ${s.id}`, path]]),
-            {
-                '@context': 'https://schema.org', '@type': 'BusStop', name: `${s.name} (stop ${s.id})`, identifier: s.id, url: SITE_URL + path,
-                geo: { '@type': 'GeoCoordinates', latitude: s.lat, longitude: s.lng },
-                address: { '@type': 'PostalAddress', addressLocality: 'Regina', addressRegion: 'SK', addressCountry: 'CA' },
-            },
-        ],
-    };
-}
 
 /** Pages whose content lives elsewhere (legal text, portfolios); these just need the right head */
 export const STATIC_META: Record<string, PageMeta> = {

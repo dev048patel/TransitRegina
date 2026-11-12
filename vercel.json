@@ -2,6 +2,9 @@
     "cleanUrls": true,
     "trailingSlash": false,
     "redirects": [
+        { "source": "/routes", "destination": "/", "permanent": true },
+        { "source": "/routes/:path*", "destination": "/", "permanent": true },
+        { "source": "/stops/:path*", "destination": "/", "permanent": true },
         {
             "source": "/:path*",
             "has": [{ "type": "host", "value": "www.transitregina.ca" }],

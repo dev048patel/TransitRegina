@@ -154,6 +154,7 @@ export function useSavedDestinationsController() {
             await SavedDestinationsService.remove(deletingId);
             setDestinations(prev => prev.filter(d => d.id !== deletingId));
             setDeletingId(null);
+            track('place_unsaved');
         } catch {
             setError('Failed to delete. Please try again.');
         } finally {

@@ -69,6 +69,8 @@ let lastPage = { path: '', at: 0 };
 /** Records one thing the rider did. Fields must be on the server's list for that kind (UsageEvents.CLIENT_EVENTS). */
 export function track(kind: string, detail: UsageDetail = {}): void {
     if (typeof window === 'undefined') return;   // prerendering
+    // Admins looking at the admin panel are not riders using the app
+    if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) return;
     // The same page reported twice within a second is one visit (React can run the page effect twice)
     if (kind === 'page_view') {
         if (detail.path === lastPage.path && Date.now() - lastPage.at < 1000) return;

@@ -3,9 +3,8 @@
  * The admin Usage page: what riders do, over the chosen number of Regina days. Refreshes every minute.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { useLoadScript } from '@react-google-maps/api';
 import { apiGet } from '../../models/lib/apiClient';
-import { MapModel } from '../../models/MapModel';
+import { useAdminMap, useRange } from './useExploreController';
 
 export interface UsageTop { value: string; events: number; visitors: number }
 export interface UsageTotals { visitors: number; riders: number; pageViews: number; searches: number; trips: number }
@@ -20,17 +19,20 @@ export interface Usage {
     daily: { day: string; visitors: number; riders: number; pageViews: number; searches: number; trips: number }[];
     kinds: { kind: string; events: number; visitors: number }[];
     funnel: { label: string; visitors: number }[];
+    /** One-day periods only: per Regina hour */
+    hourly: HourCount[] | null;
     hours: { weekday: number; hour: number; events: number }[];
     devices: { device: string; visitors: number }[];
     top: Record<'places' | 'tappedPlaces' | 'tripDestinations' | 'tripRoutes' | 'routes' | 'busRoutes' | 'buses' | 'stops' | 'pages' | 'characters' | 'menus' | 'location'
         | 'locationProblems' | 'sources' | 'campaigns' | 'browsers' | 'systems' | 'screens' | 'languages' | 'installed' | 'connections' | 'versions'
-        | 'errors' | 'errorPlaces' | 'apiErrors' | 'chosenRank' | 'expandedRank' | 'reports', UsageTop[]>;
+        | 'errors' | 'errorPlaces' | 'apiErrors' | 'chosenRank' | 'expandedRank' | 'reports' | 'plannerPlaces', UsageTop[]>;
     sessions: { sessions: number; avg_minutes: number | null; median_minutes: number | null; avg_pages: number | null; bounce_rate: number | null } | null;
     vitals: Metric[]; timings: Metric[]; unmet: Unmet[];
     retention: { week: string; riders: number; returning_riders: number; new_riders: number }[];
     latest: { at: string; kind: string; page: string | null; device: string | null; detail: Record<string, unknown>; who: string; userId: string | null; visitor: string | null }[];
 }
 
+export interface HourCount { hour: number; events: number; people: number; searches: number; trips: number }
 export interface NowVisitor { who: string; userId: string | null; visitor: string | null; at: string; kind: string; page: string | null; device: string | null; events: number }
 export interface SearchPoint { lat: number; lng: number; events: number; label: string }
 
@@ -38,15 +40,13 @@ export const RANGES = [{ days: 1, label: 'Today' }, { days: 7, label: '7 days' }
 const REFRESH_MS = 60_000, NOW_REFRESH_MS = 30_000;
 
 export function useUsageController() {
-    const [days, setDaysState] = useState(7);
-    /** A custom range (Regina dates, inclusive), used instead of `days` when set */
-    const [custom, setCustom] = useState<{ from: string; to: string } | null>(null);
+    /** The period: the last `days` Regina days, or a custom range (Regina dates, inclusive); kept in the address */
+    const { days, setDays, custom, setCustom, query } = useRange();
     const [data, setData] = useState<Usage | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [now, setNow] = useState<{ setup: boolean; visitors: NowVisitor[] } | null>(null);
     const [points, setPoints] = useState<SearchPoint[]>([]);
-    const query = custom ? `from=${custom.from}&to=${custom.to}` : `days=${days}`;
 
     const load = useCallback(async () => {
         try {
@@ -67,11 +67,8 @@ export function useUsageController() {
     const loadNow = useCallback(async () => { try { setNow(await (await apiGet('/api/admin/usage/now')).json()); } catch { /* keeps the last list */ } }, []);
     useEffect(() => { loadNow(); const id = setInterval(() => { if (!document.hidden) loadNow(); }, NOW_REFRESH_MS); return () => clearInterval(id); }, [loadNow]);
 
-    // The search map uses the same Google Maps loader settings as the rider map (two different settings would fail)
-    const { isLoaded: mapReady } = useLoadScript({ googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '', libraries: MapModel.libraries });
-
-    const setDays = (d: number) => { setCustom(null); setDaysState(d); };
-    return { days, setDays, custom, setCustom, data, error, loading, now, points, mapReady };
+    const mapReady = useAdminMap();
+    return { days, setDays, custom, setCustom, query, data, error, loading, now, points, mapReady };
 }
 
 /** Downloads rows as a CSV file (opens in Excel or Google Sheets) */

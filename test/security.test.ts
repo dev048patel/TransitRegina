@@ -177,6 +177,9 @@ const ADMIN_ONLY: [string, string, unknown?][] = [
     ['GET', '/api/analytics/visitors'],
     ['GET', '/api/analytics/summary'],
     ['GET', '/api/admin/usage'],
+    ['GET', '/api/admin/usage/item?topic=places&value=Cornwall%20Centre'],
+    ['GET', '/api/admin/usage/people'],
+    ['GET', '/api/admin/usage/events'],
     ['GET', `/api/admin/users/${OTHER}/activity`],
     ['POST', '/api/sms/broadcast', { routeNum: '4', message: 'hello' }],
     ['GET', '/api/admin/sms'],
@@ -1409,6 +1412,58 @@ test('the usage page checks its range, and says when tracking is not set up', as
     const r = await api('GET', '/api/admin/usage', { token: T.admin });
     assert.equal(r.status, 200);
     assert.deepEqual(r.json, { setup: false });
+});
+
+test('an item page shows who did it, from just that action and value, and records the look', async () => {
+    const rows = [
+        { at: '2026-11-10T15:00:00Z', kind: 'place_searched', page: '/map', device: 'Mobile', detail: { place: 'Cornwall Centre', lat: 50.449, lng: -104.611 }, visitor: `u:${USER}`, user_id: USER, session: 'v1' },
+        { at: '2026-11-10T16:00:00Z', kind: 'place_searched', page: '/map', device: 'Desktop', detail: { place: 'Cornwall Centre', lat: 50.449, lng: -104.611 }, visitor: 'a:AAAAAAAAAAAAAAAAAAAAAA', user_id: null, session: 'v2' },
+    ];
+    answer = (method, url) => method === 'GET' && url.startsWith('/rest/v1/usage_events') ? rows : undefined;
+    const r = await api('GET', '/api/admin/usage/item?topic=places&value=Cornwall%20Centre&days=7', { token: T.admin });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.totals, { events: 2, people: 2, signedIn: 1, anonymous: 1 });
+    assert.equal(r.json.people.find((p: any) => p.userId === USER).who, `user-${USER.slice(0, 4)}@example.com`, 'the account, by email');
+    assert.equal(r.json.people.find((p: any) => !p.userId).who, 'Visitor AAAAAA');
+    assert.equal(r.json.points[0].label, 'Cornwall Centre');
+    const query = decodeURIComponent(calls.find(c => c.method === 'GET' && c.url.startsWith('/rest/v1/usage_events'))!.url.replace(/\+/g, ' '));
+    assert.ok(query.includes('kind=eq.place_searched') && query.includes('detail->>place=eq.Cornwall Centre'), query);
+    assert.equal(calls.find(c => c.url.startsWith('/rest/v1/usage_events'))!.auth, 'service-key');
+    await settle();
+    assert.ok(events.recent().some(e => e.type === 'personal_data_viewed' && e.userId === ADMIN), 'naming riders is recorded');
+});
+
+test('an item page refuses an unknown kind of item, a missing value or a bad range', async () => {
+    for (const q of ['topic=nope&value=x', 'topic=places', 'topic=places&value=', 'topic=__proto__&value=x', 'topic=places&value=x&days=500'])
+        assert.equal((await api('GET', `/api/admin/usage/item?${q}`, { token: T.admin })).status, 400, q);
+    assert.ok(!calls.some(c => c.url.startsWith('/rest/v1/usage_events')), 'nothing asked of the database');
+});
+
+test('the riders list names signed-in riders, counts what each did, and records the look', async () => {
+    answer = (method, url) => method === 'GET' && url.startsWith('/rest/v1/usage_events') ? [
+        { at: '2026-11-10T15:00:00Z', kind: 'trip_started', page: '/map', device: 'Mobile', detail: { place: 'U of R', routes: '4' }, visitor: `u:${USER}`, user_id: USER, session: 'v1' },
+        { at: '2026-11-10T15:01:00Z', kind: 'page_view', page: '/map', device: 'Desktop', detail: { path: '/map' }, visitor: 'a:AAAAAAAAAAAAAAAAAAAAAA', user_id: null, session: 'v2' },
+    ] : undefined;
+    const r = await api('GET', '/api/admin/usage/people?days=30', { token: T.admin });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.people.length, 2);
+    assert.equal(r.json.people[0].userId, USER);
+    assert.equal(r.json.people[0].trips, 1);
+    await settle();
+    assert.ok(events.recent().some(e => e.type === 'personal_data_viewed' && e.userId === ADMIN));
+});
+
+test('the activity feed filters by kind and who, pages by time, and its search cannot change the filter', async () => {
+    answer = (method, url) => method === 'GET' && url.startsWith('/rest/v1/usage_events') ? [] : undefined;
+    const r = await api('GET', `/api/admin/usage/events?days=7&kind=bus_opened&who=signed&before=2026-11-10T15:00:00.000Z&q=${encodeURIComponent('x),kind.eq.signed_up,(y')}`, { token: T.admin });
+    assert.equal(r.status, 200);
+    const query = decodeURIComponent(calls.find(c => c.method === 'GET' && c.url.startsWith('/rest/v1/usage_events'))!.url.replace(/\+/g, ' '));
+    assert.ok(query.includes('kind=eq.bus_opened'), query);
+    assert.ok(query.includes('user_id=not.is.null'), query);
+    assert.ok(query.includes('at=lt.2026-11-10T15:00:00.000Z'), query);
+    assert.ok(query.includes('*x kind eq signed up y*') && !query.includes('kind.eq.signed_up'), query);
+    for (const q of ['kind=nope', 'who=everyone', 'before=yesterday', 'days=0'])
+        assert.equal((await api('GET', `/api/admin/usage/events?${q}`, { token: T.admin })).status, 400, q);
 });
 
 test('looking at one rider\'s activity is recorded', async () => {

@@ -49,6 +49,10 @@ export const CLIENT_EVENTS: Record<string, Record<string, Field>> = {
     trip_texts: { action: ['asked', 'declined', 'signin_needed'] },
     menu_opened: { panel: ['trip_planner', 'saved', 'weekly'] },
     place_saved: {},
+    place_unsaved: {},
+    // The Trip Planner (from → to) and "arrive by" plans
+    planner_searched: { place: s(120), lat: 'coord', lng: 'coord', options: 'int', best_minutes: 'int' },
+    arrive_by_planned: { status: ['planned', 'partial', 'no_service'], day: ['today', 'tomorrow'], options: 'int', minutes: 'int' },
     weekly_saved: { days: 'int' },
     signed_up: {},
     signed_in: { method: ['email', 'phone'] },

@@ -18,6 +18,9 @@ export const USAGE_LABEL: Record<string, string> = {
     trip_texts_on: 'Turned on trip texts',
     menu_opened: 'Opened a planner panel',
     place_saved: 'Saved a place',
+    place_unsaved: 'Removed a saved place',
+    planner_searched: 'Planned a trip',
+    arrive_by_planned: 'Planned an arrive-by trip',
     weekly_saved: 'Saved a weekly commute',
     signed_up: 'Signed up',
     signed_in: 'Signed in',
@@ -65,6 +68,8 @@ export function describeUsage(kind: string, detail: Record<string, unknown> = {}
         case 'trip_texts': return d('action') === 'declined' ? 'Said no to trip texts' : d('action') === 'signin_needed' ? 'Asked for trip texts (not signed in)' : 'Asked for trip texts';
         case 'trip_texts_on': return `Turned on trip texts${d('routes') ? ` for route ${d('routes').replace(/>/g, ' › ')}` : ''}`;
         case 'menu_opened': return `Opened ${PANEL[d('panel')] ?? 'a planner panel'}`;
+        case 'planner_searched': return `Planned a trip to ${d('place') || 'a place'} in the Trip Planner${d('options') ? `: ${d('options')} options${d('best_minutes') ? `, best ${d('best_minutes')} min` : ''}` : ': no bus options'}`;
+        case 'arrive_by_planned': return d('status') === 'no_service' ? `Planned an arrive-by trip (${d('day')}): no bus gets there in time` : `Planned an arrive-by trip (${d('day')}): ${d('options') || 1} way${d('options') === '1' ? '' : 's'}${d('minutes') ? `, ${d('minutes')} min` : ''}${d('status') === 'partial' ? ', part of the way by bus' : ''}`;
         case 'weekly_saved': return `Saved a weekly commute (${d('days') || 0} days)`;
         case 'signed_in': return `Signed in with ${d('method') === 'phone' ? 'their phone number' : 'email'}`;
         case 'profile_updated': return `Updated their profile (${d('fields') || 'details'})`;
@@ -83,3 +88,44 @@ export function describeUsage(kind: string, detail: Record<string, unknown> = {}
 }
 
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** 0 → "12 am", 13 → "1 pm" */
+export const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'am' : 'pm'}`;
+
+const routeName = (v: string) => `Route ${v.replace(/>/g, ' › ')}`;
+/**
+ * The things an admin can open on Insights (each ranked list, by its name on the server: USAGE_TOPS):
+ * what one is called, its page title, and what the people on that page did.
+ */
+export const TOPICS: Record<string, { name: (v: string) => string; did: string; group: string }> = {
+    places: { name: v => v, did: 'searched for this place', group: 'Places searched' },
+    plannerPlaces: { name: v => v, did: 'planned a trip here in the Trip Planner', group: 'Trip Planner destinations' },
+    tappedPlaces: { name: v => v, did: 'picked this place on the map', group: 'Places picked on the map' },
+    tripDestinations: { name: v => v, did: 'started a trip here', group: 'Trip destinations' },
+    tripRoutes: { name: routeName, did: 'started a trip on this route', group: 'Routes ridden' },
+    routes: { name: routeName, did: 'picked this route on the map', group: 'Routes picked' },
+    busRoutes: { name: routeName, did: 'tapped a bus on this route', group: 'Buses tapped, by route' },
+    buses: { name: v => `Bus #${v}`, did: 'tapped this bus', group: 'Buses tapped' },
+    stops: { name: v => v, did: "opened this stop's arrival board", group: 'Stops checked' },
+    pages: { name: v => v, did: 'opened this page', group: 'Pages' },
+    sources: { name: v => v === 'direct' ? 'Typed the address or a bookmark' : v, did: 'came to the app this way', group: 'How riders found the app' },
+    location: { name: v => v === 'allowed' ? 'Allowed their location' : 'Declined their location', did: 'gave this answer', group: 'Sharing their location' },
+    chosenRank: { name: v => v === '0' ? 'The recommended bus option' : `Bus option ${Number(v) + 1}`, did: 'chose this bus option', group: 'Bus option chosen' },
+    errors: { name: v => v, did: 'hit this error', group: 'Crashes' },
+    apiErrors: { name: v => v, did: 'had this request fail', group: 'Failed requests' },
+    browsers: { name: v => v, did: 'used this browser', group: 'Browsers' },
+    systems: { name: v => v, did: 'used this system', group: 'Systems' },
+    menus: { name: v => PANEL[v] ?? v, did: 'opened this panel', group: 'Panels opened' },
+    characters: { name: v => v, did: 'chose this map character', group: 'Map characters' },
+    reports: { name: v => REPORT[v] ?? v, did: 'reported this', group: 'Problem reports' },
+    locationProblems: { name: v => PROBLEM[v] ?? v, did: 'had this location problem', group: 'Location problems' },
+};
+/** The item page an action belongs to: kind → [topic, the detail field holding its value] */
+export const KIND_TOPIC: Record<string, [string, string]> = {
+    place_searched: ['places', 'place'], planner_searched: ['plannerPlaces', 'place'], place_tapped: ['tappedPlaces', 'place'],
+    trip_started: ['tripDestinations', 'place'], route_selected: ['routes', 'route'], bus_opened: ['buses', 'bus'], stop_opened: ['stops', 'name'],
+    page_view: ['pages', 'path'], app_error: ['errors', 'message'], api_error: ['apiErrors', 'endpoint'], report_sent: ['reports', 'kind'],
+    character_changed: ['characters', 'character'], menu_opened: ['menus', 'panel'], location: ['location', 'choice'], location_problem: ['locationProblems', 'problem'],
+};
+/** The address of an item's page, keeping the range being looked at. The value goes in the query: it can hold slashes (a page, a request) */
+export const topicLink = (topic: string, value: string, range = '') => `/admin/insights/item/${topic}?value=${encodeURIComponent(value)}${range ? `&${range}` : ''}`;
+

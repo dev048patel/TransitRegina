@@ -14,7 +14,8 @@ import { RealTimeService } from '../../models/services/RealTimeService';
 import { SmsOutageService } from '../../models/services/SmsOutageService';
 import { reginaDateKey, startOfReginaDay } from '../../models/services/ReginaTime';
 import { SmsAccessService, SMS_FEATURE } from '../../models/services/SmsAccessService';
-import { presentWithin, summarizeEvents, type VisitorEvent } from '../../models/services/UsageEvents';
+import { CLIENT_EVENTS, SERVER_EVENTS, presentWithin, summarizeEvents, type VisitorEvent } from '../../models/services/UsageEvents';
+import { actorOf, cleanSearch, isAdminPage, perHour, summarizeItem, summarizePeople, type ExploreRow } from '../../models/services/UsageExplorer';
 
 const router = Router();
 // Everyone on the admin panel (admins and view-only admins) may look; anything that changes something also needs requireAdmin
@@ -122,6 +123,7 @@ const USAGE_TOPS: [string, string, string][] = [
     ['installed', 'session_start', 'installed'], ['connections', 'session_start', 'connection'], ['versions', 'session_start', 'version'],
     ['errors', 'app_error', 'message'], ['errorPlaces', 'app_error', 'where'], ['apiErrors', 'api_error', 'endpoint'],
     ['chosenRank', 'trip_started', 'rank'], ['expandedRank', 'option_expanded', 'rank'], ['reports', 'report_sent', 'kind'],
+    ['plannerPlaces', 'planner_searched', 'place'],
 ];
 /** For one rider's page: a shorter list */
 const PERSON_TOPS = USAGE_TOPS.filter(([name]) => ['places', 'tripDestinations', 'tripRoutes', 'routes', 'busRoutes', 'stops', 'pages', 'browsers', 'systems', 'errors'].includes(name));
@@ -155,6 +157,10 @@ function usageRange(q: Record<string, unknown>): { p_from: string; p_to: string;
     return { p_from, p_to: startOfReginaDay(1).toISOString(), days, before: { p_from: startOfReginaDay(1 - 2 * days).toISOString(), p_to: p_from } };
 }
 
+/** The Regina days of a range, oldest first (YYYY-MM-DD) */
+const dayKeys = (range: { p_from: string; days: number }) =>
+    Array.from({ length: range.days }, (_, i) => reginaDateKey(new Date(new Date(range.p_from).getTime() + (i + 0.5) * 86_400_000)));
+
 router.get('/usage', async (req: Request, res: Response) => {
     const range = usageRange(req.query);
     if (!range) { reject(req, res, 'Use days=1 to 90, or from and to dates (YYYY-MM-DD) up to a year apart'); return; }
@@ -175,9 +181,10 @@ router.get('/usage', async (req: Request, res: Response) => {
         db.rpc('usage_metric', { ...r, p_kind: 'timing', p_name_key: 'what', p_value_key: 'ms' }), db.rpc('usage_unmet', { ...r, p_limit: 30 }), db.rpc('usage_retention', { p_weeks: 8 }),
     ]);
     const deeper = !sessions.error;
+    // One day: per hour instead (a chart per day would be one bar). Admin pages are not riders.
+    const oneDay = days === 1 ? await allRows(() => db.from('usage_events').select('at, kind, visitor, page').gte('at', r.p_from).lt('at', r.p_to).order('at', { ascending: false }), PEOPLE_MAX) : null;
     const counted = new Map((daily.data as UsageDay[]).map(d => [d.day, d]));
-    const fromDay = new Date(r.p_from);
-    const dayList = Array.from({ length: days }, (_, i) => reginaDateKey(new Date(fromDay.getTime() + (i + 0.5) * 86_400_000)));
+    const dayList = dayKeys(range);
     const top = Object.fromEntries(USAGE_TOPS.map(([name], i) => [name, tops(rest[i].data)])) as Record<string, Top[]>;
     const kindList = nums<{ kind: string; events: number; visitors: number }>(kinds.data, ['events', 'visitors']);
     const visitorsOf = (kind: string, path?: string) => path ? (top.pages.find(p => p.value === path)?.visitors ?? 0) : (kindList.find(k => k.kind === kind)?.visitors ?? 0);
@@ -189,6 +196,7 @@ router.get('/usage', async (req: Request, res: Response) => {
         daily: dayList.map(day => { const d = counted.get(day); return { day, visitors: Number(d?.visitors ?? 0), riders: Number(d?.riders ?? 0), pageViews: Number(d?.page_views ?? 0), searches: Number(d?.searches ?? 0), trips: Number(d?.trips ?? 0) }; }),
         kinds: kindList,
         funnel: FUNNEL.map(([label, kind, path]) => ({ label, visitors: visitorsOf(kind, path) })),
+        hourly: oneDay && !oneDay.error ? perHour(oneDay.rows.filter(x => !isAdminPage(x))) : null,
         hours: nums<{ weekday: number; hour: number; events: number }>(hours.data, ['events']),
         devices: nums<{ device: string; visitors: number }>(devices.data, ['visitors']),
         top,
@@ -228,6 +236,78 @@ router.get('/usage/points', async (req: Request, res: Response) => {
     if (notSetUp(error)) { res.json({ setup: false, points: [] }); return; }
     if (error) { console.error('[Admin] Points error:', error.message); res.status(500).json({ error: 'Could not load the map' }); return; }
     res.json({ setup: true, points: nums<{ lat: number; lng: number; events: number; label: string }>(data, ['lat', 'lng', 'events']) });
+});
+
+// ── Explore: who did what, for the Insights drill-downs. These name signed-in riders, so each look is recorded like a rider's page. ──
+const EXPLORE_ROWS = 'at, kind, page, device, detail, visitor, user_id, session';
+/* ponytail: rows are fetched and counted here, capped; move the counting into SQL functions if a period ever holds more */
+const ITEM_MAX = 5_000, PEOPLE_MAX = 20_000, ACTIVITY_PAGE = 100, PAGE = 1_000;
+/** Every ranked list on the Usage page can be opened: its name → the action and the detail it ranks */
+const TOPICS = new Map(USAGE_TOPS.map(([name, kind, key]) => [name, { kind, key }]));
+const KNOWN_KINDS = new Set<string>([...Object.keys(CLIENT_EVENTS), ...SERVER_EVENTS]);
+/** Detail fields the activity search looks in */
+const SEARCHED = ['place', 'name', 'stop', 'route', 'routes', 'bus', 'path', 'message', 'endpoint', 'source', 'best_route'];
+
+/** Rows of a query, 1,000 at a time (the most the database hands back at once), up to `max` */
+async function allRows(build: () => { range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { code?: string; message: string } | null }> }, max: number) {
+    const rows: ExploreRow[] = [];
+    for (let from = 0; from < max; from += PAGE) {
+        const { data, error } = await build().range(from, Math.min(from + PAGE, max) - 1);
+        if (error) return { rows, error, capped: false };
+        rows.push(...(data ?? []) as ExploreRow[]);
+        if ((data ?? []).length < PAGE) return { rows, error: null, capped: false };
+    }
+    return { rows, error: null, capped: true };
+}
+/** Adds each signed-in rider's email (as `who`) */
+const named = async (rows: ExploreRow[]): Promise<ExploreRow[]> => (await withPeople(rows.map(r => ({ ...r, message: '' })))).map(({ message: _m, admin: _a, ...r }) => r);
+const shown = (r: ExploreRow) => ({ at: r.at, kind: r.kind, page: r.page, device: r.device, detail: r.detail ?? {}, ...actorOf(r) });
+
+// One item in depth: who did it, when, on what, and the places involved (?topic=places&value=Cornwall Centre&days=7)
+router.get('/usage/item', async (req: Request, res: Response) => {
+    const range = usageRange(req.query), name = String(req.query.topic ?? ''), topic = TOPICS.get(name), value = req.query.value;
+    if (!range || !topic || !isText(value, 200)) { reject(req, res, 'Unknown item, or an invalid range'); return; }
+    const { rows, error, capped } = await allRows(() => serviceDb().from('usage_events').select(EXPLORE_ROWS)
+        .eq('kind', topic.kind).eq(`detail->>${topic.key}`, value).gte('at', range.p_from).lt('at', range.p_to).order('at', { ascending: false }), ITEM_MAX);
+    if (notSetUp(error)) { res.json({ setup: false }); return; }
+    if (error) { console.error('[Admin] Item error:', error.message); res.status(500).json({ error: 'Could not load this item' }); return; }
+    const list = await named(rows.filter(x => !isAdminPage(x)));
+    const summary = summarizeItem(list, dayKeys(range));
+    if (summary.totals.signedIn) await audit(req, 'personal_data_viewed', `Admin viewed who did "${topic.kind}" for "${value}" (${summary.totals.signedIn} signed-in riders)`);
+    res.json({ setup: true, topic: name, value, kind: topic.kind, days: range.days, capped, ...summary, events: list.slice(0, 300).map(shown) });
+});
+
+// Everyone who used the app in the period, busiest first, with what each did
+router.get('/usage/people', async (req: Request, res: Response) => {
+    const range = usageRange(req.query);
+    if (!range) { reject(req, res, 'Use days=1 to 90, or from and to dates (YYYY-MM-DD) up to a year apart'); return; }
+    const { rows, error, capped } = await allRows(() => serviceDb().from('usage_events').select(EXPLORE_ROWS)
+        .gte('at', range.p_from).lt('at', range.p_to).order('at', { ascending: false }), PEOPLE_MAX);
+    if (notSetUp(error)) { res.json({ setup: false }); return; }
+    if (error) { console.error('[Admin] People error:', error.message); res.status(500).json({ error: 'Could not load riders' }); return; }
+    const people = summarizePeople(await named(rows.filter(x => !isAdminPage(x))));
+    if (people.some(p => p.userId)) await audit(req, 'personal_data_viewed', `Admin viewed the list of riders and what each did (${range.days} days)`);
+    res.json({ setup: true, days: range.days, capped, people: people.slice(0, 1_000) });
+});
+
+// Every action, newest first, 100 at a time (?before=<time of the last one shown>), filtered by kind, signed in or not, and words
+router.get('/usage/events', async (req: Request, res: Response) => {
+    const range = usageRange(req.query), kind = req.query.kind, who = req.query.who, before = req.query.before, words = cleanSearch(req.query.q);
+    if (!range || (kind !== undefined && kind !== '' && !KNOWN_KINDS.has(String(kind))) || (who !== undefined && !['all', 'signed', 'anonymous'].includes(String(who)))
+        || (before !== undefined && (typeof before !== 'string' || Number.isNaN(Date.parse(before))))) { reject(req, res, 'Invalid filter'); return; }
+    let q = serviceDb().from('usage_events').select('at, kind, page, device, detail, visitor, user_id')
+        .gte('at', range.p_from).lt('at', before ? new Date(before as string).toISOString() : range.p_to).order('at', { ascending: false }).limit(ACTIVITY_PAGE);
+    q = kind ? q.eq('kind', String(kind)) : q.not('kind', 'in', '(vitals,timing)');   // speed measurements only when asked for
+    if (who === 'signed') q = q.not('user_id', 'is', null);
+    if (who === 'anonymous') q = q.is('user_id', null);
+    if (words) q = q.or(SEARCHED.map(k => `detail->>${k}.ilike."*${words}*"`).join(','));
+    const { data, error } = await q;
+    if (notSetUp(error)) { res.json({ setup: false, events: [] }); return; }
+    if (error) { console.error('[Admin] Events error:', error.message); res.status(500).json({ error: 'Could not load activity' }); return; }
+    const raw = (data ?? []) as ExploreRow[];
+    const list = await named(raw.filter(x => !isAdminPage(x)));   // the next page still starts after the last row read
+    if (!before && list.some(r => r.user_id)) await audit(req, 'personal_data_viewed', `Admin browsed riders' activity${kind ? ` (${kind})` : ''}${words ? ` matching "${words}"` : ''}`);
+    res.json({ setup: true, events: list.map(shown), next: raw.length === ACTIVITY_PAGE ? raw[raw.length - 1].at : null });
 });
 
 // ── One rider in depth: what they do, texts sent to them, what they saved, admin notes. Personal data: viewing is recorded. ──

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchArriveByPlan, journeyToTrip, type ArriveByPlan, type PlannedJourney } from '../models/services/ArriveByClient';
 import type { TripOption } from '../models/transit/RoutePlanning';
+import { track } from '../models/services/UsageTracker';
 
 interface ArriveByInput {
     origin: { lat: number; lng: number } | null;
@@ -26,7 +27,13 @@ export function useArriveByController({ origin, destination, time }: ArriveByInp
         let current = true;
         setLoading(true);
         fetchArriveByPlan(origin, { lat: destLat, lng: destLng }, time)
-            .then(p => { if (current) setPlan(p); })
+            .then(p => {
+                if (!current) return;
+                setPlan(p);
+                // For the admin Insights pages: whether a bus gets there in time, and how long the best way takes
+                const best = p.status === 'planned' ? p.journeys[0] : p.status === 'partial' ? p.journey : p.earliest;
+                track('arrive_by_planned', { status: p.status, day: p.day, options: p.status === 'planned' ? p.journeys.length : p.status === 'partial' ? 1 : 0, minutes: best ? Math.round(best.totalMin) : undefined });
+            })
             .catch(() => { if (current) setError("Couldn't plan this trip. Check your connection and try again."); })
             .finally(() => { if (current) setLoading(false); });
         return () => { current = false; };   // a newer time or place replaces this answer

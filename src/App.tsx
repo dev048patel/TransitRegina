@@ -53,6 +53,9 @@ const AdminHome = React.lazy(() => import('./views/admin/AdminHome'));
 const People = React.lazy(() => import('./views/admin/People'));
 const PersonPage = React.lazy(() => import('./views/admin/PersonPage'));
 const VisitorPage = React.lazy(() => import('./views/admin/VisitorPage'));
+const InsightItem = React.lazy(() => import('./views/admin/InsightItem'));
+const InsightActivity = React.lazy(() => import('./views/admin/InsightActivity'));
+const InsightRiders = React.lazy(() => import('./views/admin/InsightRiders'));
 const TextAlerts = React.lazy(() => import('./views/admin/TextAlerts'));
 const Insights = React.lazy(() => import('./views/admin/Insights'));
 const ActivityLog = React.lazy(() => import('./views/admin/ActivityLog'));
@@ -180,6 +183,9 @@ function AppRoutes() {
                     <Route path="service" element={<RouteManager />} />
                     <Route path="insights" element={<Insights />} />
                     <Route path="insights/visitors/:id" element={<VisitorPage />} />
+                    <Route path="insights/activity" element={<InsightActivity />} />
+                    <Route path="insights/riders" element={<InsightRiders />} />
+                    <Route path="insights/item/:topic" element={<InsightItem />} />
                     <Route path="security" element={<SecurityCenter />} />
                     <Route path="activity" element={<ActivityLog />} />
                     <Route path="reports" element={<Reports />} />

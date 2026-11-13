@@ -5,6 +5,7 @@ import { RoutePlanningService } from '../models/services/RoutePlanningService';
 import { TripOption } from '../models/transit/RoutePlanning';
 import { LocationState } from '../models/transit/LocationState';
 import { BusPosition } from '../models/transit/BusPosition';
+import { track } from '../models/services/UsageTracker';
 
 const routePlanningService = new RoutePlanningService();
 
@@ -106,6 +107,10 @@ export function useTripPlannerController(liveBuses?: BusPosition[], walkMultipli
                 liveBuses
             );
             setRouteResults(results);
+            // For the admin Insights pages: where to (the place picked and its area, never what was typed) and what came back
+            const best = results[0];
+            track('planner_searched', { place: destination.label?.split(',')[0], lat: destination.lat, lng: destination.lng, options: results.length,
+                best_minutes: best ? Math.round(best.totalTimeWithWait ?? best.totalTime) : undefined });
         } catch (error) {
             console.error('Error finding routes:', error);
             setRouteResults([]);

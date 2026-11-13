@@ -6,10 +6,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useUsageController, change, RANGES, type UsageTop } from '../../controllers/admin/useUsageController';
-import { CsvButton, ErrorsCard, NowCard, RetentionCard, SearchMap, SessionTiles, UnmetCard } from './UsageSections';
-import { WEEKDAYS, describeUsage } from '../../models/data/usageLabels';
+import { useUsageController, change } from '../../controllers/admin/useUsageController';
+import { ErrorsCard, EventText, Heatmap, NowCard, PersonName, RangePicker, RetentionCard, SearchMap, SessionTiles, TopList, UnmetCard, usePlacePicker } from './UsageSections';
 import { Card, PageHeader, when } from '../components/admin/ui';
+import { hourLabel } from '../../models/data/usageLabels';
 
 const BLUE = '#1a73e8', ORANGE = '#e37400';   // validated pair: distinct for colour-blind readers too
 // Charts don't animate: the page refreshes every minute, and replaying the animation each time is distracting
@@ -31,55 +31,9 @@ function Total({ label, value, before, hint }: { label: string; value: number; b
     );
 }
 
-/** A ranked list: value, times, distinct riders */
-function TopList({ title, about, rows, valueLabel, render, empty = 'Nothing yet.' }: { title: string; about: string; rows: UsageTop[]; valueLabel: string; render?: (v: string) => React.ReactNode; empty?: string }) {
-    return (
-        <Card title={title} about={about} action={<CsvButton name={title.toLowerCase().replace(/[^a-z0-9]+/g, '-')} rows={rows as unknown as Record<string, unknown>[]} />}>
-            {rows.length === 0 ? <p className="px-5 py-6 text-sm text-slate-500">{empty}</p> : (
-                <table className="w-full text-sm">
-                    <thead><tr className="text-left text-xs text-slate-500"><th className="px-5 py-2 font-medium">{valueLabel}</th><th className="px-3 py-2 font-medium text-right">Times</th><th className="px-5 py-2 font-medium text-right">Riders</th></tr></thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {rows.map(r => (
-                            <tr key={r.value}><td className="px-5 py-2 text-slate-900 break-words">{render ? render(r.value) : r.value}</td><td className="px-3 py-2 text-right tabular-nums">{n(r.events)}</td><td className="px-5 py-2 text-right tabular-nums text-slate-600">{n(r.visitors)}</td></tr>
-                        ))}
-                    </tbody>
-                </table>
-            )}
-        </Card>
-    );
-}
-
-/** Busiest times: one hue, light (quiet) to dark (busy); every cell names its numbers on hover */
-function Heatmap({ hours }: { hours: { weekday: number; hour: number; events: number }[] }) {
-    const at = new Map(hours.map(h => [`${h.weekday}-${h.hour}`, h.events]));
-    const max = Math.max(1, ...hours.map(h => h.events));
-    const STEPS = ['#f1f5f9', '#dbe7fb', '#b3cdf6', '#7aa9f0', '#3f82e6', '#1a5fc4'];
-    const shade = (v: number) => v === 0 ? STEPS[0] : STEPS[Math.min(5, 1 + Math.floor((v / max) * 4.999))];
-    return (
-        <div className="overflow-x-auto px-5 py-4">
-            <table className="text-[10px] text-slate-500 border-separate" style={{ borderSpacing: 2 }}>
-                <thead><tr><th />{Array.from({ length: 24 }, (_, h) => <th key={h} className="font-normal w-5">{h % 3 === 0 ? (h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`) : ''}</th>)}</tr></thead>
-                <tbody>
-                    {[1, 2, 3, 4, 5, 6, 0].map(d => (
-                        <tr key={d}>
-                            <th className="font-medium pr-2 text-right">{WEEKDAYS[d]}</th>
-                            {Array.from({ length: 24 }, (_, h) => {
-                                const v = at.get(`${d}-${h}`) ?? 0;
-                                return <td key={h} title={`${WEEKDAYS[d]} ${h}:00–${h}:59 (Regina): ${n(v)} actions`} className="w-5 h-5 rounded" style={{ backgroundColor: shade(v) }} />;
-                            })}
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-            <div className="flex items-center gap-1 mt-2 text-[10px] text-slate-500">Quiet {STEPS.map(c => <span key={c} className="w-4 h-3 rounded inline-block" style={{ backgroundColor: c }} />)} Busy</div>
-        </div>
-    );
-}
-
 export default function Usage() {
-    const { days, setDays, custom, setCustom, data, error, loading, now, points, mapReady } = useUsageController();
-    const today = new Date(Date.now() - 6 * 3_600_000).toISOString().slice(0, 10);   // Regina date
-    const [draft, setDraft] = React.useState<{ from: string; to: string }>({ from: today, to: today });
+    const { days, setDays, custom, setCustom, query, data, error, loading, now, points, mapReady } = useUsageController();
+    const pickPlace = usePlacePicker(query);
     const ready = data?.setup ? data : null;
 
     return (
@@ -87,25 +41,7 @@ export default function Usage() {
             <PageHeader
                 title="Usage"
                 subtitle={ready ? `What riders do in the app · Regina days · updated every minute` : 'What riders do in the app'}
-                actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div role="group" aria-label="Time range" className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-                            {RANGES.map(r => (
-                                <button key={r.days} onClick={() => setDays(r.days)} aria-pressed={!custom && days === r.days}
-                                    className={'px-3 py-1.5 text-xs font-semibold rounded-md ' + (!custom && days === r.days ? 'bg-[#003DA5] text-white' : 'text-slate-600 hover:bg-slate-50')}>
-                                    {r.label}
-                                </button>
-                            ))}
-                        </div>
-                        {/* Any range of Regina days, up to a year */}
-                        <form onSubmit={e => { e.preventDefault(); if (draft.from <= draft.to) setCustom(draft); }} className={'inline-flex items-center gap-1 rounded-lg border bg-white px-1.5 py-0.5 text-xs ' + (custom ? 'border-[#003DA5]' : 'border-slate-200')}>
-                            <input type="date" aria-label="From" value={draft.from} max={today} onChange={e => setDraft(d => ({ ...d, from: e.target.value }))} className="px-1 py-1 text-xs" />
-                            <span className="text-slate-400">to</span>
-                            <input type="date" aria-label="To" value={draft.to} max={today} onChange={e => setDraft(d => ({ ...d, to: e.target.value }))} className="px-1 py-1 text-xs" />
-                            <button type="submit" disabled={!draft.from || !draft.to || draft.from > draft.to} className="px-2 py-1 font-semibold text-[#003DA5] disabled:text-slate-400">Show</button>
-                        </form>
-                    </div>
-                }
+                actions={<RangePicker days={days} custom={custom} setDays={setDays} setCustom={setCustom} />}
             />
             {error && <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">Could not load usage: {error}</p>}
             {data && !data.setup && (
@@ -128,10 +64,10 @@ export default function Usage() {
                     </div>
 
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-                        <Card title="Visitors per day" about="How many people used the app each day. Look for growth, and for dips on days with service changes.">
+                        <Card title={ready.hourly ? 'Visitors per hour' : 'Visitors per day'} about={ready.hourly ? 'How many people used the app in each hour of the day (Regina time).' : 'How many people used the app each day. Look for growth, and for dips on days with service changes.'}>
                             <div className="h-64 p-4">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={ready.daily.map(d => ({ ...d, label: dayLabel(d.day, days) }))} barCategoryGap={2}>
+                                    <BarChart data={ready.hourly ? ready.hourly.map(h => ({ visitors: h.people, label: hourLabel(h.hour) })) : ready.daily.map(d => ({ ...d, label: dayLabel(d.day, days) }))} barCategoryGap={2}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                         <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
                                         <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={12} width={36} />
@@ -141,10 +77,10 @@ export default function Usage() {
                                 </ResponsiveContainer>
                             </div>
                         </Card>
-                        <Card title="Searches and trips per day" about="Blue is people searching for a place, orange is people starting a trip. When the lines are close, most searches end in a bus ride.">
+                        <Card title={ready.hourly ? 'Searches and trips per hour' : 'Searches and trips per day'} about="Blue is people searching for a place, orange is people starting a trip. When the lines are close, most searches end in a bus ride.">
                             <div className="h-64 p-4">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={ready.daily.map(d => ({ ...d, label: dayLabel(d.day, days) }))}>
+                                    <LineChart data={ready.hourly ? ready.hourly.map(h => ({ searches: h.searches, trips: h.trips, label: hourLabel(h.hour) })) : ready.daily.map(d => ({ ...d, label: dayLabel(d.day, days) }))}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                         <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
                                         <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={12} width={36} />
@@ -184,15 +120,27 @@ export default function Usage() {
                     {ready.deeper && (
                         <div className="grid grid-cols-1 gap-4">
                             <UnmetCard rows={ready.unmet} />
-                            <SearchMap points={points} ready={mapReady} />
+                            <SearchMap points={points} ready={mapReady} onPick={pickPlace} />
                         </div>
                     )}
 
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-                        <TopList title="What riders searched for" about="The places people wanted to get to most. These are the destinations the bus network matters most for." valueLabel="Place" rows={ready.top.places} />
-                        <TopList title="Where riders started trips to" about="Places people actually took a bus to after searching. Compare with the list beside it: a place searched often but rarely travelled to is badly served." valueLabel="Destination" rows={ready.top.tripDestinations} />
-                        <TopList title="Routes riders rode" about="The routes in the trips people started. A trip with a transfer shows both routes, like 9 › 4." valueLabel="Route" rows={ready.top.tripRoutes} render={v => `Route ${v.replace(/>/g, ' › ')}`} />
-                        <TopList title="Stops riders checked" about="Stops whose arrival board people opened to see when the next bus comes. These are the busiest stops for the app's riders." valueLabel="Stop" rows={ready.top.stops} />
+                        <TopList topic="places" query={query} title="What riders searched for" about="The places people wanted to get to most. Click one to see who searched for it, when and on what." valueLabel="Place" rows={ready.top.places} />
+                        <TopList topic="tripDestinations" query={query} title="Where riders started trips to" about="Places people actually took a bus to after searching. Compare with the list beside it: a place searched often but rarely travelled to is badly served." valueLabel="Destination" rows={ready.top.tripDestinations} />
+                        <TopList topic="tripRoutes" query={query} title="Routes riders rode" about="The routes in the trips people started. A trip with a transfer shows both routes, like 9 › 4." valueLabel="Route" rows={ready.top.tripRoutes} render={v => `Route ${v.replace(/>/g, ' › ')}`} />
+                        <TopList topic="stops" query={query} title="Stops riders checked" about="Stops whose arrival board people opened to see when the next bus comes. Click one to see who checks it and when." valueLabel="Stop" rows={ready.top.stops} />
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
+                        <TopList topic="buses" query={query} title="Buses riders tapped" about="Live buses people tapped on the map to see where they are. Click one to see who followed it." valueLabel="Bus" rows={ready.top.buses ?? []} render={v => `Bus #${v}`} />
+                        <TopList topic="routes" query={query} title="Routes riders picked" about="Routes people chose from the route picker to see on the map." valueLabel="Route" rows={ready.top.routes ?? []} render={v => `Route ${v}`} />
+                        <TopList topic="busRoutes" query={query} title="Buses tapped, by route" about="Which routes' buses people tap most: the routes riders are waiting on." valueLabel="Route" rows={ready.top.busRoutes ?? []} render={v => `Route ${v}`} />
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
+                        <TopList topic="plannerPlaces" query={query} title="Planned in the Trip Planner" about="Where people planned trips to with the Trip Planner (from one place to another)." valueLabel="Destination" rows={ready.top.plannerPlaces ?? []} />
+                        <TopList topic="tappedPlaces" query={query} title="Places picked on the map" about="Places people tapped on the map instead of searching." valueLabel="Place" rows={ready.top.tappedPlaces ?? []} />
+                        <TopList topic="pages" query={query} title="Pages opened" about="Which pages of the app people open." valueLabel="Page" rows={ready.top.pages ?? []} />
                     </div>
 
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
@@ -217,25 +165,25 @@ export default function Usage() {
                     </div>
 
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
-                        <TopList title="Which bus option riders took" about="When the app lists bus options, which one people chose. Mostly the first one means the app's recommendation is good." valueLabel="Option" rows={ready.top.chosenRank} render={v => v === '0' ? 'The recommended one' : `Option ${Number(v) + 1}`} />
-                        <TopList title="Sharing their location" about="Whether people let the app use their location. Without it, they have to type where they are." valueLabel="Answer" rows={ready.top.location} render={v => v === 'allowed' ? 'Allowed' : 'Declined'} />
-                        <TopList title="How riders found the app" about="The website people came from. 'Typed the address or a bookmark' means they already knew the app." valueLabel="Source" rows={ready.top.sources} render={v => v === 'direct' ? 'Typed the address or a bookmark' : v} />
+                        <TopList topic="chosenRank" query={query} title="Which bus option riders took" about="When the app lists bus options, which one people chose. Mostly the first one means the app's recommendation is good." valueLabel="Option" rows={ready.top.chosenRank} render={v => v === '0' ? 'The recommended one' : `Option ${Number(v) + 1}`} />
+                        <TopList topic="location" query={query} title="Sharing their location" about="Whether people let the app use their location. Without it, they have to type where they are." valueLabel="Answer" rows={ready.top.location} render={v => v === 'allowed' ? 'Allowed' : 'Declined'} />
+                        <TopList topic="sources" query={query} title="How riders found the app" about="The website people came from. 'Typed the address or a bookmark' means they already knew the app." valueLabel="Source" rows={ready.top.sources} render={v => v === 'direct' ? 'Typed the address or a bookmark' : v} />
                     </div>
 
                     {ready.deeper && (
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
                             <RetentionCard rows={ready.retention} />
-                            <ErrorsCard errors={ready.top.errors} places={ready.top.errorPlaces} api={ready.top.apiErrors} />
+                            <ErrorsCard errors={ready.top.errors} places={ready.top.errorPlaces} api={ready.top.apiErrors} query={query} />
                         </div>
                     )}
 
-                    <Card title="Latest activity" about="The most recent things people did, newest first. Click a name to see everything that person did." action={<span className="text-xs text-slate-500">signed-out riders are anonymous</span>}>
+                    <Card title="Latest activity" about="The most recent things people did, newest first. Click a name to see everything that person did, or an action to see everyone who did the same." action={<Link to={`/admin/insights/activity?${query}`} className="text-xs font-semibold text-[#003DA5] hover:underline">See all activity →</Link>}>
                         <ul className="divide-y divide-slate-100">
                             {ready.latest.map((e, i) => (
                                 <li key={e.at + i} className="px-5 py-2.5 text-sm flex flex-wrap gap-x-3 gap-y-0.5">
                                     <span className="text-slate-500 tabular-nums w-32 flex-none">{when(e.at)}</span>
-                                    <span className="text-slate-900 flex-1 min-w-[12rem]">{describeUsage(e.kind, e.detail, e.page)}</span>
-                                    <span className="text-slate-500">{e.userId || e.visitor ? <Link to={e.userId ? `/admin/people/${e.userId}` : `/admin/insights/visitors/${e.visitor}`} className="text-[#003DA5] hover:underline">{e.who}</Link> : e.who}{e.device ? ` · ${e.device}` : ''}</span>
+                                    <span className="text-slate-900 flex-1 min-w-[12rem]"><EventText e={e} query={query} /></span>
+                                    <span className="text-slate-500"><PersonName a={e} />{e.device ? ` · ${e.device}` : ''}</span>
                                 </li>
                             ))}
                             {ready.latest.length === 0 && <li className="px-5 py-8 text-sm text-slate-500 text-center">No activity yet.</li>}

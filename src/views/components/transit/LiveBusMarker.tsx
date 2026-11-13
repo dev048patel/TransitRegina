@@ -133,6 +133,8 @@ interface LiveBusMarkerProps {
 
 export default function LiveBusMarker({ bus, color, selected, zoom, onSelect, onClose }: LiveBusMarkerProps) {
     const markerRef = useRef<google.maps.Marker | null>(null);
+    // The same marker, as state: the details pop-up can only open once it exists (anchored to it)
+    const [marker, setMarker] = useState<google.maps.Marker | null>(null);
     const iconRef = useRef<google.maps.Icon | null>(null);
     // Where the marker is first placed. Kept stable so re-renders don't pull it back; after that the
     // motion controller moves it directly.
@@ -170,23 +172,28 @@ export default function LiveBusMarker({ bus, color, selected, zoom, onSelect, on
 
     const handleLoad = useCallback((marker: google.maps.Marker) => {
         markerRef.current = marker;
+        setMarker(marker);
         iconRef.current = initial.icon; // what the marker was created with
         draw(latest.current.position, latest.current.heading); // catch up on motion before the marker existed
     }, [draw, initial.icon]);
 
     return (
+        <>
         <Marker
             position={initial.position}
             icon={initial.icon}
             title={`Bus #${bus.bus_id} — Route ${bus.route_num} (${bus.line_name})`}
             zIndex={BUS_Z_BASE + bus.bus_id}
             onLoad={handleLoad}
+            onUnmount={() => setMarker(null)}
             onClick={onSelect}
-        >
-            {/* Anchored to the marker, so it travels with the bus */}
-            {selected && (
+        />
+            {/* Anchored to the marker, so it travels with the bus. Only once the marker exists: a bus that is
+                already selected when its marker is (re)created, e.g. when the map is rebuilt, would otherwise
+                open it with nothing to point at, which crashes */}
+            {selected && marker && (
                 // Google's header row only holds its close button and leaves a blank strip on top: our own ✕ instead
-                <InfoWindow onCloseClick={onClose} options={{ headerDisabled: true }}>
+                <InfoWindow anchor={marker} onCloseClick={onClose} options={{ headerDisabled: true }}>
                     <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', width: '216px' }}>
                         {/* Route and where it goes */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -224,6 +231,6 @@ export default function LiveBusMarker({ bus, color, selected, zoom, onSelect, on
                     </div>
                 </InfoWindow>
             )}
-        </Marker>
+        </>
     );
 }

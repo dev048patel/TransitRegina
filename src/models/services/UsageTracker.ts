@@ -69,6 +69,9 @@ let lastPage = { path: '', at: 0 };
 /** Records one thing the rider did. Fields must be on the server's list for that kind (UsageEvents.CLIENT_EVENTS). */
 export function track(kind: string, detail: UsageDetail = {}): void {
     if (typeof window === 'undefined') return;   // prerendering
+    // Running on a developer's computer (npm run start): not a rider, and its hot reloads raise errors riders
+    // never see. It shares the live database, so leave it out of the admin pages.
+    if (import.meta.env.DEV) return;
     // Admins looking at the admin panel are not riders using the app
     if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) return;
     // The same page reported twice within a second is one visit (React can run the page effect twice)

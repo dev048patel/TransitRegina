@@ -20,6 +20,8 @@ export function useTripScheduleController() {
 
     const [options, setOptions] = useState<TripOption[]>([]);
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+    // The option drawn on the map ("Preview on map"), or null for the form and its list of options
+    const [previewIndex, setPreviewIndex] = useState<number | null>(null);
     const [calculating, setCalculating] = useState(false);
     const [calcError, setCalcError] = useState('');
 
@@ -35,7 +37,11 @@ export function useTripScheduleController() {
     }, [isOpen, user?.id]);
 
     const handleOpen = useCallback(() => setIsOpen(true), []);
-    const handleClose = useCallback(() => setIsOpen(false), []);
+    const handleClose = useCallback(() => { setIsOpen(false); setPreviewIndex(null); }, []);
+
+    const startPreview = useCallback((index: number) => { setSelectedIndex(index); setPreviewIndex(index); }, []);
+    const endPreview = useCallback(() => setPreviewIndex(null), []);
+    const previewTrip: TripOption | null = previewIndex !== null ? options[previewIndex] ?? null : null;
 
     const handleFindBuses = useCallback(async () => {
         if (!fromId || !toId) { setCalcError('Please select both From and To locations.'); return; }
@@ -47,6 +53,7 @@ export function useTripScheduleController() {
         setCalcError('');
         setOptions([]);
         setSelectedIndex(null);
+        setPreviewIndex(null);
         try {
             const results = await routePlanner.calculateTripOptions(
                 { lat: from.lat, lng: from.lng },
@@ -68,6 +75,7 @@ export function useTripScheduleController() {
         setArriveBy('08:00');
         setOptions([]);
         setSelectedIndex(null);
+        setPreviewIndex(null);
         setCalcError('');
     }, []);
 
@@ -81,6 +89,7 @@ export function useTripScheduleController() {
         arriveBy, setArriveBy,
         options,
         selectedIndex, setSelectedIndex,
+        previewTrip, startPreview, endPreview,
         calculating,
         calcError,
         handleOpen,

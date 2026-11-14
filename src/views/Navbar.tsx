@@ -2,6 +2,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Route } from '../models/transit/Route';
+import { TripOption } from '../models/transit/RoutePlanning';
 import { useAuth } from '../models/context/AuthContext';
 import { useFeatureAccess } from '../models/context/FeatureAccessContext';
 import { useNavbarController } from '../controllers/useNavbarController';
@@ -21,16 +22,23 @@ interface NavbarProps {
     routes?: Route[];
     selectedRoute?: string | null;
     onRouteSelect?: (routeNum: string | null) => void;
+    /** The Trip Planner option being previewed on the map, or null when none is */
+    onPreviewTrip?: (trip: TripOption | null) => void;
 }
 
 // Renders the top navbar with search, route filter, admin link, profile, and saved locations
-export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRoute, onRouteSelect }: NavbarProps) {
+export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRoute, onRouteSelect, onPreviewTrip }: NavbarProps) {
     const { isStaff: isAdmin } = useAuth();   // the admin link shows for view-only admins too
     const { hasFeature } = useFeatureAccess();
     const { ready, value, status, data, showResults, handleInput, handleClear, handleSelect, handleFocus } = useNavbarController(onPlaceSelect, onClearPlace);
     const saved = useSavedDestinationsController();
     const tplan = useTripScheduleController();
     const weplan = useWeeklyPlannerController();
+
+    // The Trip Planner's previewed option goes to the map while its panel is open; none once it closes
+    const plannerPreview = tplan.isOpen ? tplan.previewTrip : null;
+    React.useEffect(() => { onPreviewTrip?.(plannerPreview); }, [plannerPreview, onPreviewTrip]);
+    React.useEffect(() => () => onPreviewTrip?.(null), [onPreviewTrip]);
 
     // Mutual panel exclusion helpers
     const { track } = useUsageTracking();

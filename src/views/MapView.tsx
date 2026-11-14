@@ -27,7 +27,7 @@ import { stopIconFor } from '../models/data/stopIcons';
 import { applyCharacterTheme } from '../models/data/characterThemes';
 import PlaceBubble, { destinationPinFor } from './components/transit/PlaceBubble';
 
-/** On phones the suggestions card covers this share of the screen height while a trip is previewed (App.css) */
+/** On phones the suggestions card (or Trip Planner panel) covers this share of the screen height while a trip is previewed (App.css) */
 const PREVIEW_CARD_PHONE = 0.3;
 
 /*
@@ -66,6 +66,15 @@ export const MapView: React.FC<MapViewProps> = ({
   const trackingWalks = useTripWalksController(activeTracking);
   // A trip planned for later, previewed on the map from the suggestions panel ("Preview on map")
   const [previewTrip, setPreviewTrip] = useState<TripOption | null>(null);
+  // A Trip Planner option previewed on the map (between two saved locations); it takes the map over from the rest
+  const [plannerPreview, setPlannerPreview] = useState<TripOption | null>(null);
+  const handlePlannerPreview = useCallback((trip: TripOption | null) => {
+    setPlannerPreview(trip);
+    if (!trip) return;
+    setShowBusSuggestions(false);
+    setShowStopDetail(false);
+    setShowInfoWindow(false);
+  }, []);
   const [selectedBus, setSelectedBus] = useState<BusPosition | null>(null);
   const [selectedStop, setSelectedStop] = useState<Stop | null>(null);
   const [showStopDetail, setShowStopDetail] = useState(false);
@@ -123,7 +132,7 @@ export const MapView: React.FC<MapViewProps> = ({
   // Tapping the map: a named place (shop, park, school…) or any bare spot becomes the destination,
   // with the same character bubble a search result gets
   const handleMapClick = async (e: google.maps.MapMouseEvent) => {
-    if (activeTracking || !e.latLng) return;
+    if (activeTracking || plannerPreview || !e.latLng) return;
     const placeId = (e as google.maps.IconMouseEvent).placeId;
     // Swap Google's own place popup for the character bubble
     if (placeId) e.stop();
@@ -147,8 +156,8 @@ export const MapView: React.FC<MapViewProps> = ({
     setShowBusSuggestions(false);
   }, [setSelectedPlaceMarker]);
 
-  // The previewed trip, while the suggestions panel that chose it is open and nothing is tracked
-  const shownPreview = showBusSuggestions && !activeTracking ? previewTrip : null;
+  // The previewed trip, while the panel that chose it (Trip Planner or suggestions) is open and nothing is tracked
+  const shownPreview = activeTracking ? null : plannerPreview ?? (showBusSuggestions ? previewTrip : null);
   const previewWalks = useTripWalksController(shownPreview);
   // Whole trip in view: start, every stop, destination, clear of the panel (top right; on phones the top of the screen)
   useEffect(() => {
@@ -262,6 +271,7 @@ export const MapView: React.FC<MapViewProps> = ({
             // Clearing the route also lets go of the bus that picked it
             if (!routeNum) setSelectedBus(null);
           }}
+          onPreviewTrip={handlePlannerPreview}
         />
       )}
 
@@ -388,7 +398,7 @@ export const MapView: React.FC<MapViewProps> = ({
             onClick={() => setShowInfoWindow(true)}
           />
         )}
-        {selectedPlaceMarker && !activeTracking && showInfoWindow && (
+        {selectedPlaceMarker && !activeTracking && !shownPreview && showInfoWindow && (
           <PlaceBubble
             character={character}
             position={selectedPlaceMarker.location}

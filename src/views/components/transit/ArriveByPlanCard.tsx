@@ -8,13 +8,13 @@ import type { ArriveByPlan, JourneyKind, PlannedJourney } from '../../../models/
 
 const routeColor = (route: string) => transitColors.find(c => c.route_id === parseInt(route))?.colour ?? '#1a73e8';
 
-const KIND_LABEL: Record<JourneyKind, string> = {
+export const KIND_LABEL: Record<JourneyKind, string> = {
     best: '★ Latest bus that gets you there',
     other: 'Another way',
     earlier: 'Earlier bus, in case you miss it',
 };
 
-function Steps({ journey }: { journey: PlannedJourney }) {
+export function Steps({ journey }: { journey: PlannedJourney }) {
     const [openStops, setOpenStops] = React.useState<Set<number>>(new Set());
     const toggleStops = (i: number) => setOpenStops(prev => {
         const next = new Set(prev);
@@ -86,7 +86,7 @@ function Steps({ journey }: { journey: PlannedJourney }) {
     );
 }
 
-function RouteBadges({ journey }: { journey: PlannedJourney }) {
+export function RouteBadges({ journey }: { journey: PlannedJourney }) {
     return (
         <span style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
             {journey.legs.map((leg, i) => (

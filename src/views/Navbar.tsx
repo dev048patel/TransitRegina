@@ -35,8 +35,8 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
     const tplan = useTripScheduleController();
     const weplan = useWeeklyPlannerController();
 
-    // The Trip Planner's previewed option goes to the map while its panel is open; none once it closes
-    const plannerPreview = tplan.isOpen ? tplan.previewTrip : null;
+    // The Trip Planner's or Weekly Commute's previewed trip goes to the map while its panel is open; none once it closes
+    const plannerPreview = tplan.isOpen ? tplan.previewTrip : weplan.isOpen ? weplan.previewTrip : null;
     React.useEffect(() => { onPreviewTrip?.(plannerPreview); }, [plannerPreview, onPreviewTrip]);
     React.useEffect(() => () => onPreviewTrip?.(null), [onPreviewTrip]);
 

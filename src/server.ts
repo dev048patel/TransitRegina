@@ -50,6 +50,10 @@ function cstNow(): { h: number; m: number; day: number } {
 }
 /** Riders can write this column themselves, so only something that looks like a route number is put in a message. */
 function routeLabel(v: unknown): string { return typeof v === 'string' && /^[A-Za-z0-9]{1,6}$/.test(v) ? v : '?'; }
+/** Every bus of a pinned trip ("4 › 18"), or its first one for rows saved before route_list existed */
+function routesLabel(s: { route_num?: unknown; route_list?: unknown }): string {
+    return Array.isArray(s.route_list) && s.route_list.length ? s.route_list.slice(0, 4).map(routeLabel).join(' › ') : routeLabel(s.route_num);
+}
 function padded(n: number) { return n.toString().padStart(2, '0'); }
 function addMins(h: number, m: number, delta: number): string {
     const total = h * 60 + m + delta;
@@ -66,7 +70,7 @@ schedule('* * * * *', async () => {
         // regardless of how Supabase stores the column type.
         const { data: schedules } = await serviceDb()
             .from('weekly_schedules')
-            .select('user_id, route_num, arrive_by, depart_by')
+            .select('user_id, route_num, route_list, arrive_by, depart_by')
             .eq('day_of_week', day)
             .eq('enabled', true)
             .like('depart_by', `${target}%`);
@@ -97,7 +101,7 @@ schedule('* * * * *', async () => {
                 const arriveLabel = (s.arrive_by ?? '').slice(0, 5);
                 return [{
                     phone: profile.mobile_number as string,
-                    body: `Transit Regina: Leave by ${departLabel} for Bus ${routeLabel(s.route_num)} → arrive by ${arriveLabel}. Reply STOP to unsubscribe.`,
+                    body: `Transit Regina: Leave by ${departLabel} for Bus ${routesLabel(s)} → arrive by ${arriveLabel}. Reply STOP to unsubscribe.`,
                 }];
             });
             if (recipients.length) await TwilioService.sendBatch(recipients);
@@ -116,7 +120,7 @@ schedule('* * * * *', async () => {
                 const departLabel = (s.depart_by ?? target).slice(0, 5);
                 const payload = JSON.stringify({
                     title: 'Time to leave!',
-                    body: `Bus ${routeLabel(s.route_num)} · Leave by ${departLabel} to arrive by ${String(s.arrive_by ?? '').slice(0, 5)}`,
+                    body: `Bus ${routesLabel(s)} · Leave by ${departLabel} to arrive by ${String(s.arrive_by ?? '').slice(0, 5)}`,
                     url: '/map',
                 });
 

@@ -104,7 +104,9 @@ export function createApp() {
         const text = toGsm(message);
         if (text.length > 160) { res.status(400).json({ error: 'Message must be 160 characters or fewer (single SMS segment)' }); return; }
 
-        const { data: schedules, error } = await appDb().from('weekly_schedules').select('user_id').eq('route_num', routeNum).eq('enabled', true);
+        // Riders on this route at any point of their commute (route_list), not only as their first bus
+        const { data: schedules, error } = await appDb().from('weekly_schedules').select('user_id')
+            .or(`route_num.eq.${routeNum},route_list.cs.{${routeNum}}`).eq('enabled', true);
         if (error) { res.status(500).json({ error: 'Could not read schedules' }); return; }
         const userIds = [...new Set((schedules ?? []).map(s => s.user_id as string))];
         const profiles = await inChunks(userIds, async ids => (await appDb().from('profiles').select('id, mobile_number')

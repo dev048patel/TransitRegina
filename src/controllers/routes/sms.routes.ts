@@ -334,7 +334,7 @@ router.post('/broadcast', requireAuth, requireAdmin, async (req: Request, res: R
     const { data: schedules } = await serviceDb()
         .from('weekly_schedules')
         .select('user_id')
-        .eq('route_num', routeNum)
+        .or(`route_num.eq.${routeNum},route_list.cs.{${routeNum}}`)   // any bus of the trip, not only the first
         .eq('enabled', true);
 
     if (!schedules?.length) {

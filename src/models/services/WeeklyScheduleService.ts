@@ -1,15 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { DbWeeklySchedule } from '../transit/WeeklySchedule';
-
-type UpsertRow = {
-    fromDestId: string | null;
-    toDestId: string | null;
-    arriveBy: string;
-    departBy: string | null;
-    routeNum: string | null;
-    routeTotalMinutes: number | null;
-    enabled: boolean;
-};
+import { DbWeeklySchedule, SaveRow } from '../transit/WeeklySchedule';
 
 export const WeeklyScheduleService = {
     async getForUser(userId: string): Promise<DbWeeklySchedule[]> {
@@ -22,33 +12,37 @@ export const WeeklyScheduleService = {
         return data || [];
     },
 
-    async getTodayForUser(userId: string): Promise<DbWeeklySchedule | null> {
+    /** Today's trips with reminders on (the trip there and the trip home), earliest departure first */
+    async getTodayForUser(userId: string): Promise<DbWeeklySchedule[]> {
         const { data, error } = await supabase
             .from('weekly_schedules')
             .select('*')
             .eq('user_id', userId)
             .eq('day_of_week', new Date().getDay())
             .eq('enabled', true)
-            .maybeSingle();
+            .order('depart_by');
         if (error) throw error;
-        return data;
+        return data || [];
     },
 
-    async saveAll(userId: string, days: Map<number, UpsertRow>): Promise<void> {
-        const rows = Array.from(days.entries()).map(([dayOfWeek, p]) => ({
-            user_id: userId,
-            day_of_week: dayOfWeek,
-            from_dest_id: p.fromDestId,
-            to_dest_id: p.toDestId,
-            arrive_by: p.arriveBy,
-            depart_by: p.departBy,
-            route_num: p.routeNum,
-            route_total_minutes: p.routeTotalMinutes,
-            enabled: p.enabled,
-        }));
+    /** One row per day and trip (docs/security/commute_001_trip_home.sql) */
+    async saveAll(userId: string, rows: SaveRow[]): Promise<void> {
+        if (!rows.length) return;
         const { error } = await supabase
             .from('weekly_schedules')
-            .upsert(rows, { onConflict: 'user_id,day_of_week' });
+            .upsert(rows.map(r => ({
+                user_id: userId,
+                day_of_week: r.day,
+                trip: r.trip,
+                from_dest_id: r.fromId,
+                to_dest_id: r.toId,
+                arrive_by: r.arriveBy,
+                depart_by: r.departBy,
+                route_num: r.routeNum,
+                route_list: r.routeList,
+                route_total_minutes: r.routeTotalMinutes,
+                enabled: r.enabled,
+            })), { onConflict: 'user_id,day_of_week,trip' });
         if (error) throw error;
     },
 };

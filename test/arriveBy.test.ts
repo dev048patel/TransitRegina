@@ -58,3 +58,24 @@ test('a time that has already passed today plans for tomorrow', () => {
     const plan = ArriveByService.plan(HILLSDALE, EAST, 9 * 60, NOW);
     assert.equal(plan.day, 'tomorrow');
 });
+
+test('a weekly commute plans the next such weekday: today while the time is ahead, else a week on', () => {
+    // NOW is Friday 23 October 2026, 11:15 AM
+    const thisFriday = ArriveByService.plan(HILLSDALE, EAST, 14 * 60 + 13, NOW, 5);
+    assert.equal(thisFriday.day, 'today');
+    assert.equal(thisFriday.date, '2026-10-23');
+
+    const nextFriday = ArriveByService.plan(HILLSDALE, EAST, 9 * 60, NOW, 5);
+    assert.equal(nextFriday.day, 'later');
+    assert.equal(nextFriday.date, '2026-10-30', 'the time has passed today, so a week from today');
+
+    assert.equal(ArriveByService.plan(HILLSDALE, EAST, 9 * 60, NOW, 6).day, 'tomorrow');
+    const tuesday = ArriveByService.plan(HILLSDALE, EAST, 9 * 60, NOW, 2);
+    assert.equal(tuesday.date, '2026-10-27');
+    assert.equal(new Date(tuesday.date + 'T12:00:00Z').getUTCDay(), 2);
+});
+
+test('without a weekday it still plans today, or tomorrow once the time has passed', () => {
+    assert.equal(ArriveByService.plan(HILLSDALE, EAST, 14 * 60 + 13, NOW).date, '2026-10-23');
+    assert.equal(ArriveByService.plan(HILLSDALE, EAST, 9 * 60, NOW).date, '2026-10-24');
+});

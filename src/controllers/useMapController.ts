@@ -139,12 +139,12 @@ export const useMapController = (): MapControllerOutput => {
   /*
     Bus cache: prevents losing buses that temporarily vanish from the API.
     Each bus is tracked with a missCount; only evicted after MAX_MISS consecutive
-    absences (~30s at the 1.5s poll interval). The feed often leaves a bus out for a few
+    absences (~60s at the 1.5s poll interval). The feed often leaves a bus out for a few
     polls; keeping it means it glides to its next position instead of vanishing and popping back.
   */
   // new Map -> initialize cache as an empty map
   const busCacheRef = useRef<Map<number, { bus: BusPosition; missCount: number }>>(new Map()); // useRef to store the value of bus and re-render the map when the value changes 
-  const MAX_MISS = 20; // Remove a bus only after it's been missing for 20 consecutive polls (~30s)
+  const MAX_MISS = 40; // Remove a bus only after it's been missing for 40 consecutive polls (~60s)
 
   // Poll for Live Buses → API Call (with cache merge)
   useEffect(() => {

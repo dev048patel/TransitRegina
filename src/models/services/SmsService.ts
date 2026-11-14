@@ -1,9 +1,24 @@
 import { apiGet, apiPost, apiPatch } from '../lib/apiClient';
+import { supabase } from '../lib/supabase';
 
 /** Text alerts need an admin's approval: where the rider stands */
 export type SmsAccess = 'approved' | 'pending' | 'declined' | 'none';
 
+/** on: their commute is texted · off: they could turn texts on in their profile · unavailable: not for this account */
+export type CommuteTexts = 'on' | 'off' | 'unavailable';
+
 export const SmsService = {
+    /** Whether the rider's saved commute is texted to them: approved, phone verified, and texts switched on */
+    async commuteTexts(userId: string): Promise<CommuteTexts> {
+        const [access, profile] = await Promise.all([
+            SmsService.accessStatus(),
+            supabase.from('profiles').select('mobile_number, mobile_verified, sms_opted_in').eq('id', userId).single(),
+        ]);
+        if (access === 'declined') return 'unavailable';
+        const p = profile.data as { mobile_number: string | null; mobile_verified: boolean; sms_opted_in: boolean } | null;
+        return access === 'approved' && p?.mobile_number && p.mobile_verified && p.sms_opted_in ? 'on' : 'off';
+    },
+
     async optIn(): Promise<void> {
         await apiPost('/api/sms/opt-in');
     },

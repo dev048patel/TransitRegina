@@ -47,8 +47,9 @@ router.get('/colors', TransitController.getColors);
 router.get('/live', TransitController.getLiveBuses);
 
 /**
- * GET /api/plan/arrive-by?from=lat,lng&to=lat,lng&time=HH:MM
+ * GET /api/plan/arrive-by?from=lat,lng&to=lat,lng&time=HH:MM[&weekday=0-6]
  * The latest scheduled trip that arrives by `time` (Regina time; a time already passed means tomorrow).
+ * With `weekday` (0 = Sunday): the next such day, for a weekly commute.
  * Limited per address: each answer runs the timetable planner.
  */
 router.get('/plan/arrive-by', rateLimit('plan-arrive-by', 30), TransitController.planArriveBy);

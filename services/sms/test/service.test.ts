@@ -126,6 +126,7 @@ test('broadcast needs the internal token, then texts each opted-in rider on the 
     });
     const r = await post('internal-test-token');
     assert.deepEqual(await r.json(), { ok: true, sent: 2 });
+    assert.equal(callsTo('weekly_schedules')[0].query.get('or'), '(route_num.eq.4,route_list.cs.{4})', 'riders who change onto route 4 too');
     await settle(400);
     assert.equal(texts.length, 2);
     assert.equal(texts[0].body, 'Route 4 detour on Albert St - expect delays', 'the dash is swapped so the text stays one segment');

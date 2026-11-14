@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SavedDestination } from '../models/transit/SavedDestination';
 import { TripOption } from '../models/transit/RoutePlanning';
@@ -86,11 +87,13 @@ function RouteCard({
     arriveBy,
     selected,
     onSelect,
+    onPreview,
 }: {
     option: TripOption;
     arriveBy: string;
     selected: boolean;
     onSelect: () => void;
+    onPreview: () => void;
 }) {
     const departBy = computeDepartBy(arriveBy, option.totalTime);
     const color = getRouteColor(option.segments[0]?.routeNum);
@@ -148,30 +151,111 @@ function RouteCard({
                 <div style={{ fontSize: '12px', color: '#5f6368' }}>
                     ~{option.totalTime} min total · {option.walkToFirstStop ?? option.walkingDistance}m walk to stop
                 </div>
+                <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); onPreview(); }}
+                    style={previewBtnStyle}
+                >
+                    <MapIcon /> Preview on map
+                </button>
             </div>
         </div>
     );
 }
 
+/* ── One option drawn on the map: its steps, and the way back to every option ── */
+function TripPreview({ option, arriveBy, fromName, toName, onBack }: {
+    option: TripOption;
+    arriveBy: string;
+    fromName?: string;
+    toName?: string;
+    onBack: () => void;
+}) {
+    const departBy = computeDepartBy(arriveBy, option.totalTime);
+    const walkFirst = option.walkToFirstStop ?? option.walkingDistance;
+    return (
+        <div>
+            <button type="button" onClick={onBack} style={backBtnStyle}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+                All options
+            </button>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t-accent)', margin: '2px 0 6px' }}>
+                🗺️ Shown on the map{fromName && toName ? ` · ${fromName} → ${toName}` : ''}
+            </div>
+            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                {option.segments.map((seg, i) => (
+                    <span key={i} style={{ ...badgeStyle, backgroundColor: getRouteColor(seg.routeNum) }}>Route {seg.routeNum}</span>
+                ))}
+            </div>
+            <div style={{ fontSize: '14px', color: '#202124', marginBottom: '8px' }}>
+                <span style={{ fontWeight: 700 }}>Leave by </span>
+                <span style={{ fontWeight: 800, color: 'var(--t-accent-dark)' }}>{departBy}</span>
+                <span style={{ color: '#5f6368', fontSize: '13px' }}> → arrive {arriveBy} · ~{option.totalTime} min</span>
+            </div>
+            <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                <li style={stepStyle}><span style={dotStyle('#5f6368')} /><span>Walk {walkFirst}m to <strong>{option.originStop}</strong></span></li>
+                {option.segments.map((seg, i) => (
+                    <li key={i} style={stepStyle}>
+                        <span style={dotStyle(getRouteColor(seg.routeNum))} />
+                        <span>
+                            {i > 0 && 'Transfer: '}Take <strong>Route {seg.routeNum}</strong> from {seg.fromStop} to <strong>{seg.toStop}</strong>
+                            <span style={{ color: '#5f6368' }}> · ~{seg.estimatedTime} min</span>
+                        </span>
+                    </li>
+                ))}
+                <li style={stepStyle}><span style={dotStyle('#5f6368')} /><span>Walk to {toName ?? 'your destination'}</span></li>
+            </ol>
+        </div>
+    );
+}
+
+const MapIcon = () => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z" /><path d="M8 2v16M16 6v16" />
+    </svg>
+);
+const previewBtnStyle: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: '6px', height: '30px', padding: '0 12px', marginTop: '8px',
+    border: '1.5px solid var(--t-primary)', borderRadius: '15px', background: 'transparent', color: 'var(--t-primary)',
+    fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+};
+const backBtnStyle: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: '4px', height: '32px', padding: '0 6px', marginLeft: '-6px',
+    border: 'none', background: 'transparent', color: 'var(--t-primary)', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer',
+};
+const badgeStyle: React.CSSProperties = { fontSize: '11px', fontWeight: 700, color: 'white', padding: '2px 8px', borderRadius: '8px' };
+const stepStyle: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '4px 0', fontSize: '13px', color: '#202124', lineHeight: 1.45 };
+const dotStyle = (color: string): React.CSSProperties => ({
+    width: '10px', height: '10px', borderRadius: '50%', border: `2.5px solid ${color}`, flexShrink: 0, marginTop: '4px', boxSizing: 'border-box',
+});
+
 /* ── Main Panel ───────────────────────────────────────────────── */
 export default function TripSchedulePanel({ ctrl, onPreviewLocation }: TripSchedulePanelProps) {
+    // Phones: the panel covers the map, so a picked From/To isn't shown there (it moved the map out of sight and
+    // left its place bubble waiting behind the panel). "Preview on map" shows both ends of the trip instead.
+    const [phone] = useState(() => window.matchMedia('(max-width: 640px)').matches);
     const handlePreview = (dest: SavedDestination) => {
         onPreviewLocation?.({ id: dest.id, displayName: dest.name, location: { lat: dest.lat, lng: dest.lng } });
     };
+    const previewing = ctrl.previewTrip;
 
     const fromDest = ctrl.savedDests.find(d => d.id === ctrl.fromId);
     const toDest = ctrl.savedDests.find(d => d.id === ctrl.toId);
 
     return (
         <>
-            {/* Backdrop */}
-            <div
-                onClick={ctrl.handleClose}
-                style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.2)', zIndex: 1099, top: '52px' }}
-            />
+            {/* Backdrop — none while a trip is previewed, so the map stays clear and can be moved */}
+            {!previewing && (
+                <div
+                    onClick={ctrl.handleClose}
+                    style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.2)', zIndex: 1099, top: '52px' }}
+                />
+            )}
 
-            {/* Panel */}
-            <div className="t-panel t-drawer" style={{
+            {/* Panel — a short card on phones while a trip is previewed, so the route below it shows (App.css) */}
+            <div className={`t-panel t-drawer${previewing ? ' t-drawer--preview' : ''}`} style={{
                 position: 'fixed', top: '52px', right: 0,
                 width: 'min(340px, 100vw)',
                 height: 'calc(100dvh - 52px)',
@@ -227,7 +311,11 @@ export default function TripSchedulePanel({ ctrl, onPreviewLocation }: TripSched
                         </div>
                     )}
 
-                    {ctrl.isAuthenticated && (
+                    {ctrl.isAuthenticated && previewing && (
+                        <TripPreview option={previewing} arriveBy={ctrl.arriveBy} fromName={fromDest?.name} toName={toDest?.name} onBack={ctrl.endPreview} />
+                    )}
+
+                    {ctrl.isAuthenticated && !previewing && (
                         <>
                             {/* Not enough saved locations */}
                             {!ctrl.destsLoading && ctrl.savedDests.length < 2 && (
@@ -258,7 +346,7 @@ export default function TripSchedulePanel({ ctrl, onPreviewLocation }: TripSched
                                         excluded={ctrl.toId}
                                         loading={ctrl.destsLoading}
                                         onChange={id => { ctrl.setFromId(id); ctrl.setSelectedIndex(null); }}
-                                        onPreview={handlePreview}
+                                        onPreview={phone ? undefined : handlePreview}
                                     />
 
                                     {/* Swap arrow */}
@@ -291,7 +379,7 @@ export default function TripSchedulePanel({ ctrl, onPreviewLocation }: TripSched
                                         excluded={ctrl.fromId}
                                         loading={ctrl.destsLoading}
                                         onChange={id => { ctrl.setToId(id); ctrl.setSelectedIndex(null); }}
-                                        onPreview={handlePreview}
+                                        onPreview={phone ? undefined : handlePreview}
                                     />
 
                                     {/* Arrive by */}
@@ -366,6 +454,7 @@ export default function TripSchedulePanel({ ctrl, onPreviewLocation }: TripSched
                                                     arriveBy={ctrl.arriveBy}
                                                     selected={ctrl.selectedIndex === i}
                                                     onSelect={() => ctrl.setSelectedIndex(i)}
+                                                    onPreview={() => ctrl.startPreview(i)}
                                                 />
                                             ))}
                                         </div>
@@ -377,7 +466,7 @@ export default function TripSchedulePanel({ ctrl, onPreviewLocation }: TripSched
                 </div>
 
                 {/* Footer — only shown when there are results */}
-                {ctrl.isAuthenticated && ctrl.options.length > 0 && (
+                {ctrl.isAuthenticated && ctrl.options.length > 0 && !previewing && (
                     <div style={{ padding: '12px 14px', borderTop: '1px solid var(--t-border-soft)', flexShrink: 0 }}>
                         <button
                             onClick={ctrl.handleReset}

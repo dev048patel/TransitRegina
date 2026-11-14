@@ -174,8 +174,10 @@ CREATE TABLE public.weekly_schedules (
   route_num            TEXT,                           -- pinned route number
   route_total_minutes  INTEGER,                        -- stored for quick recalculation
   enabled              BOOLEAN NOT NULL DEFAULT TRUE,  -- whether to send push reminder
+  trip                 SMALLINT NOT NULL DEFAULT 0 CHECK (trip IN (0, 1)),  -- 0 = the trip there, 1 = the trip home
+  route_list           TEXT[] CHECK (route_list IS NULL OR cardinality(route_list) <= 4),  -- every bus of the pinned trip
   created_at           TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (user_id, day_of_week)
+  UNIQUE (user_id, day_of_week, trip)               -- docs/security/commute_001_trip_home.sql
 );
 
 ALTER TABLE public.weekly_schedules ENABLE ROW LEVEL SECURITY;

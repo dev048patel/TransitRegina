@@ -11,48 +11,56 @@ function minutesUntil(timeStr: string): number {
 
 function dismissKey(schedule: DbWeeklySchedule): string {
     const today = new Date().toISOString().slice(0, 10);
-    return `reminder_dismissed_${today}_${schedule.depart_by}`;
+    return `reminder_dismissed_${today}_${schedule.trip ?? 0}_${schedule.depart_by}`;
+}
+
+function wasDismissed(s: DbWeeklySchedule): boolean {
+    try { return !!sessionStorage.getItem(dismissKey(s)); } catch { return false; }
+}
+
+/** Today's next trip: the first (by departure) not yet more than 5 min past and not dismissed */
+function nextTrip(trips: DbWeeklySchedule[]): DbWeeklySchedule | null {
+    return trips.find(t => t.depart_by && minutesUntil(t.depart_by) >= -5 && !wasDismissed(t)) ?? null;
 }
 
 export default function DepartureReminderBanner() {
     const { user, isAuthenticated } = useAuth();
+    // Today's trips with reminders on: the trip there and, if set, the trip home
+    const [trips, setTrips] = useState<DbWeeklySchedule[]>([]);
     const [schedule, setSchedule] = useState<DbWeeklySchedule | null>(null);
-    const [dismissed, setDismissed] = useState(false);
     const [minsLeft, setMinsLeft] = useState<number>(0);
 
-    // Load today's schedule once on mount
+    // Load today's trips once on mount
     useEffect(() => {
         if (!isAuthenticated || !user) return;
         WeeklyScheduleService.getTodayForUser(user.id)
-            .then(s => {
-                if (!s || !s.depart_by) return;
-                // Check not already dismissed this session
-                if (sessionStorage.getItem(dismissKey(s))) return;
-                setSchedule(s);
-                setMinsLeft(minutesUntil(s.depart_by));
-            })
+            .then(rows => setTrips(rows.filter(r => r.depart_by)))
             .catch(() => {});
     }, [isAuthenticated, user?.id]);
 
-    // Tick every 60 seconds to update countdown and auto-hide when window passes
+    // Every minute: which trip is next, and how long until it leaves. After the trip there has gone,
+    // the trip home takes over.
+    const refresh = useCallback(() => {
+        const next = nextTrip(trips);
+        setSchedule(next);
+        if (next?.depart_by) setMinsLeft(minutesUntil(next.depart_by));
+    }, [trips]);
     useEffect(() => {
-        if (!schedule?.depart_by) return;
-        const id = setInterval(() => {
-            const mins = minutesUntil(schedule.depart_by!);
-            setMinsLeft(mins);
-            if (mins < -5) setSchedule(null); // departure passed — hide
-        }, 60_000);
+        refresh();
+        if (!trips.length) return;
+        const id = setInterval(refresh, 60_000);
         return () => clearInterval(id);
-    }, [schedule?.depart_by]);
+    }, [trips, refresh]);
 
     const handleDismiss = useCallback(() => {
-        if (schedule) sessionStorage.setItem(dismissKey(schedule), '1');
-        setDismissed(true);
-    }, [schedule]);
+        if (schedule) { try { sessionStorage.setItem(dismissKey(schedule), '1'); } catch { /* private mode */ } }
+        refresh();
+    }, [schedule, refresh]);
 
     // Show only within the window: 30 min before → 5 min after departure
-    if (!schedule || !schedule.depart_by || dismissed) return null;
+    if (!schedule || !schedule.depart_by) return null;
     if (minsLeft > 30 || minsLeft < -5) return null;
+    const buses = schedule.route_list?.length ? schedule.route_list.join(' › ') : schedule.route_num;
 
     const urgent = minsLeft <= 8;
     const bg = urgent ? 'var(--t-accent)' : 'var(--t-accent-soft)';
@@ -91,9 +99,9 @@ export default function DepartureReminderBanner() {
                         : minsLeft === 1
                             ? 'Leave in 1 minute!'
                             : `Leave in ${minsLeft} min`}
-                    {schedule.route_num && (
+                    {buses && (
                         <span style={{ fontWeight: '400', marginLeft: '4px' }}>
-                            · Bus {schedule.route_num}
+                            · Bus {buses}
                         </span>
                     )}
                 </div>

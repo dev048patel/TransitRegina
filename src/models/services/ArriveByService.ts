@@ -8,7 +8,7 @@
 */
 import { timetable } from '../../../services/sms/src/transit/timetable';
 import { planArriveBy, type Journey } from '../../../services/sms/src/transit/planner';
-import { addDays, clock, reginaDate, reginaMinutes } from '../../../services/sms/src/time';
+import { addDays, clock, reginaDate, reginaMinutes, reginaWeekday } from '../../../services/sms/src/time';
 
 export interface PlannedStop { id: string; name: string; lat: number; lng: number }
 
@@ -37,11 +37,15 @@ export interface PlannedJourney {
     legs: PlannedLeg[];
 }
 
+/** today, tomorrow, or a later day of the coming week (a weekly commute planned for its weekday) */
+export type PlanDay = 'today' | 'tomorrow' | 'later';
+
+/** `date` is the Regina service date planned, 'YYYY-MM-DD' */
 export type ArriveByPlan =
     /** journeys: the best first, then other routes (latest-leaving first), then earlier buses as backups */
-    | { status: 'planned'; day: 'today' | 'tomorrow'; arriveBy: string; journeys: PlannedJourney[] }
-    | { status: 'partial'; day: 'today' | 'tomorrow'; arriveBy: string; journey: PlannedJourney; remainingMetres: number }
-    | { status: 'no_service'; day: 'today' | 'tomorrow'; arriveBy: string; earliest: PlannedJourney | null };
+    | { status: 'planned'; day: PlanDay; date: string; arriveBy: string; journeys: PlannedJourney[] }
+    | { status: 'partial'; day: PlanDay; date: string; arriveBy: string; journey: PlannedJourney; remainingMetres: number }
+    | { status: 'no_service'; day: PlanDay; date: string; arriveBy: string; earliest: PlannedJourney | null };
 
 export interface LatLng { lat: number; lng: number }
 
@@ -133,11 +137,19 @@ export class ArriveByService {
     /**
      * Plan to arrive by `arriveByMin` (minutes after midnight, Regina time). A time that has already
      * passed today is taken as tomorrow, so "8:00" asked in the evening plans tomorrow morning.
+     * With `weekday` (0 = Sunday … 6 = Saturday) it plans the next such day instead, for a weekly commute:
+     * today if the time is still ahead, otherwise a week from today.
      */
-    static plan(origin: LatLng, destination: LatLng, arriveByMin: number, now: Date = new Date()): ArriveByPlan {
-        const tomorrow = arriveByMin <= reginaMinutes(now);
-        const day = tomorrow ? 'tomorrow' : 'today';
-        const date = tomorrow ? addDays(reginaDate(now), 1) : reginaDate(now);
+    static plan(origin: LatLng, destination: LatLng, arriveByMin: number, now: Date = new Date(), weekday?: number): ArriveByPlan {
+        const passed = arriveByMin <= reginaMinutes(now);
+        let ahead: number;
+        if (weekday === undefined) ahead = passed ? 1 : 0;
+        else {
+            ahead = (weekday - reginaWeekday(now) + 7) % 7;
+            if (ahead === 0 && passed) ahead = 7;
+        }
+        const day: PlanDay = ahead === 0 ? 'today' : ahead === 1 ? 'tomorrow' : 'later';
+        const date = addDays(reginaDate(now), ahead);
         const arriveBy = clock(arriveByMin);
         const r = planArriveBy(timetable(), date, origin, destination, arriveByMin);
         if (r.status === 'planned') {
@@ -157,9 +169,9 @@ export class ArriveByService {
                 if (journeys.length >= MIN_OPTIONS) break;
                 if (!listed.has(`${routesOf(j)}@${j.leaveMin}`)) journeys.push(describe(j, 'earlier'));
             }
-            return { status: 'planned', day, arriveBy, journeys };
+            return { status: 'planned', day, date, arriveBy, journeys };
         }
-        if (r.status === 'partial') return { status: 'partial', day, arriveBy, journey: describe(r.journey, 'best'), remainingMetres: r.remainingMetres };
-        return { status: 'no_service', day, arriveBy, earliest: r.earliest ? describe(r.earliest, 'best') : null };
+        if (r.status === 'partial') return { status: 'partial', day, date, arriveBy, journey: describe(r.journey, 'best'), remainingMetres: r.remainingMetres };
+        return { status: 'no_service', day, date, arriveBy, earliest: r.earliest ? describe(r.earliest, 'best') : null };
     }
 }

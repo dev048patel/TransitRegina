@@ -14,6 +14,21 @@ export interface Person {
     features: { feature: string; enabled: boolean }[];
     sessions: { browser: string; os: string; device: string; first_seen: string; last_seen: string; page_views: number }[];
     history: { type: string; severity: string; message: string; admin: string; created_at: string }[];
+    /** Each time they opened the app or signed in, last 30 days, newest first; null before usage tracking is set up */
+    visits?: { at: string; kind: string; device: string | null; detail: Record<string, unknown> | null }[] | null;
+}
+
+/** The sign-in log grouped by Regina day, newest first: [{ day: '2026-11-16', opens: 2, items: [...] }] */
+export function visitsByDay(visits: NonNullable<Person['visits']>) {
+    const days: { day: string; opens: number; items: typeof visits }[] = [];
+    for (const v of visits) {
+        const day = new Date(Date.parse(v.at) - 6 * 3_600_000).toISOString().slice(0, 10);   // Regina is UTC-6 all year
+        if (days[days.length - 1]?.day !== day) days.push({ day, opens: 0, items: [] });
+        const today = days[days.length - 1];
+        today.items.push(v);
+        if (v.kind === 'session_start') today.opens++;
+    }
+    return days;
 }
 
 export interface PersonEvent { at: string; kind: string; page: string | null; device: string | null; session?: string | null; detail: Record<string, unknown> }
@@ -106,6 +121,8 @@ export function usePersonController(id: string) {
         catch (e) { setActivityError((e as Error).message); }
     }, [showActivity]);
 
-    return { person, error, confirm, closeConfirm: () => setConfirm(null), ask, name, setName, saveName, featureOn, toggleFeature, features: FEATURES,
+    const visitDays = person?.visits ? visitsByDay(person.visits) : null;
+
+    return { person, error, visitDays, confirm, closeConfirm: () => setConfirm(null), ask, name, setName, saveName, featureOn, toggleFeature, features: FEATURES,
         activity, activityError, showActivity, noteDraft, setNoteDraft: (v: string) => setNoteDraft(v.slice(0, 1000)), addNote, deleteNote };
 }

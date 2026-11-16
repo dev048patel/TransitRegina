@@ -12,6 +12,16 @@ import { Badge, Card, ConfirmDialog, PageHeader, btn, when } from '../components
 import RiderProfile from './RiderProfile';
 import { formatPhone } from '../../models/lib/phone';
 
+/** One line of the sign-in log */
+function visitLabel(kind: string, detail: Record<string, unknown> | null): string {
+    const d = (k: string) => typeof detail?.[k] === 'string' ? detail[k] as string : '';
+    if (kind === 'signed_in') return `Signed in with ${d('method') === 'phone' ? 'their phone number' : 'email'}`;
+    if (kind === 'signed_up') return 'Created the account';
+    if (kind === 'signed_out') return 'Signed out';
+    const on = [d('browser'), d('os')].filter(Boolean).join(' on ');
+    return `Opened the app${on ? ` (${on}${d('installed') === 'yes' ? ', installed app' : ''})` : ''}`;
+}
+
 export default function PersonPage() {
     const { id = '' } = useParams();
     const { user, isAdmin } = useAuth();   // view-only admins see everything here but change nothing
@@ -45,6 +55,29 @@ export default function PersonPage() {
                                     </div>
                                 </div>
                             </dl>
+                        </Card>
+
+                        <Card title="Sign-ins and visits" action={<span className="text-xs text-slate-500">last 30 days</span>}>
+                            {c.visitDays === null ? <p className="px-5 py-5 text-sm text-amber-900">Usage tracking is not set up yet (docs/security/011_usage_analytics.sql).</p>
+                                : c.visitDays.length === 0 ? <p className="px-5 py-6 text-sm text-slate-500 text-center">No visits in the last 30 days.</p> : (
+                                    <div className="max-h-80 overflow-y-auto">
+                                        {c.visitDays.map(d => (
+                                            <div key={d.day}>
+                                                <div className="sticky top-0 bg-slate-50 px-5 py-1 text-xs font-semibold text-slate-600">
+                                                    {new Date(d.day + 'T12:00:00Z').toLocaleDateString('en-CA', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' })}
+                                                    {d.opens > 0 && <span className="font-normal text-slate-500"> · opened {d.opens === 1 ? 'once' : `${d.opens} times`}</span>}
+                                                </div>
+                                                <ul className="divide-y divide-slate-100">{d.items.map((v, i) => (
+                                                    <li key={v.at + i} className="px-5 py-2 text-sm flex flex-wrap gap-x-3">
+                                                        <span className="text-slate-500 tabular-nums w-16 flex-none">{new Date(v.at).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Regina' })}</span>
+                                                        <span className="text-slate-900 flex-1 min-w-[10rem]">{visitLabel(v.kind, v.detail)}</span>
+                                                        {v.device && <span className="text-slate-500">{v.device}</span>}
+                                                    </li>
+                                                ))}</ul>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                         </Card>
 
                         <Card title="Features">

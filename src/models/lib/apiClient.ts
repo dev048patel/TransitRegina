@@ -8,6 +8,7 @@
 
 import { supabase } from './supabase';
 import { trackApiError } from '../services/UsageTracker';
+import { visitorDayHeader } from './visitorDay';
 
 const BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
@@ -16,7 +17,8 @@ const PUBLIC_PATHS = ['/api/analytics/beacon', '/api/analytics/heartbeat', '/api
 
 async function authHeaders(path: string): Promise<Record<string, string>> {
     const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    // Analytics calls (visits, reports) carry today's anonymous code, so a signed-out rider is one visitor all day
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(path.startsWith('/api/analytics/') ? visitorDayHeader() : {}) };
     if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
     } else if (!PUBLIC_PATHS.some(p => path.split('?')[0] === p)) {

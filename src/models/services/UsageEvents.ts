@@ -110,10 +110,16 @@ export function deviceOf(ua: string): 'Mobile' | 'Tablet' | 'Desktop' {
    always set on the server. Without either (tests, a laptop) a random key: ids then change when the server restarts. */
 const KEY = process.env.ANALYTICS_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || crypto.randomBytes(32).toString('hex');
 
-/** Who did it: the account when signed in, otherwise an id for this address + browser that changes every Regina day */
-export function visitorId(ip: string, userAgent: string, userId: string | null | undefined, now: Date | number = Date.now()): string {
+/** The random code the app keeps for today (X-Visitor-Day header): kept only if it looks like one */
+export const cleanDayCode = (v: unknown): string | null => typeof v === 'string' && /^[A-Za-z0-9_-]{16,40}$/.test(v) ? v : null;
+
+/** Who did it: the account when signed in, otherwise an anonymous id that changes every Regina day.
+ *  With the app's code for the day it is the same id all day, even when the rider's address changes (home Wi-Fi in
+ *  the morning, mobile data in the afternoon). Without it (storage blocked, an old app): this address + browser. */
+export function visitorId(ip: string, userAgent: string, userId: string | null | undefined, now: Date | number = Date.now(), dayCode?: string | null): string {
     if (userId) return `u:${userId}`;
-    return 'a:' + crypto.createHmac('sha256', KEY).update(`${reginaDateKey(now)}|${ip}|${userAgent}`).digest('base64url').slice(0, 22);
+    const who = cleanDayCode(dayCode) ? `c|${dayCode}` : `${ip}|${userAgent}`;
+    return 'a:' + crypto.createHmac('sha256', KEY).update(`${reginaDateKey(now)}|${who}`).digest('base64url').slice(0, 22);
 }
 
 let missingTableLogged = false;

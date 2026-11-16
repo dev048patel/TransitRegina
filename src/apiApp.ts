@@ -50,7 +50,7 @@ export function createApp() {
             else callback(new OriginNotAllowed(origin));
         },
         methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Visitor-Day'],   // the app's anonymous code for today (UsageEvents.visitorId)
         credentials: true,
     }));
 

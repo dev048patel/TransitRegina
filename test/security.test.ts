@@ -1348,6 +1348,46 @@ test('an anonymous visitor keeps one id all day, and gets a new one the next day
     assert.equal(visitorId('203.0.113.5', PHONE_UA, USER, nine), `u:${USER}`, 'signed in: the account');
 });
 
+test("with the app's code for the day, a visitor who changes network is still one visitor, and only for that day", async () => {
+    const { visitorId } = await import('../src/models/services/UsageEvents');
+    const ten = new Date('2026-11-07T16:00:00Z'), two = new Date('2026-11-07T20:00:00Z'), nextDay = new Date('2026-11-08T16:00:00Z');   // Regina 10 am, 2 pm, next 10 am
+    const code = 'Ab3dEf6hIj9kLm2nOp5q';
+    assert.equal(visitorId('203.0.113.5', PHONE_UA, null, ten, code), visitorId('198.51.100.7', 'Mozilla/5.0 (iPhone) other', null, two, code), 'Wi-Fi at 10, mobile data at 2: the same visitor');
+    assert.notEqual(visitorId('203.0.113.5', PHONE_UA, null, ten, code), visitorId('203.0.113.5', PHONE_UA, null, nextDay, code), 'the next day is a new id even if the code were kept');
+    assert.notEqual(visitorId('203.0.113.5', PHONE_UA, null, ten, code), visitorId('203.0.113.5', PHONE_UA, null, ten, 'Zz9yXx8wVv7uTt6sRr5q'), 'another code is another visitor');
+    assert.equal(visitorId('203.0.113.5', PHONE_UA, null, ten, 'bad code!'), visitorId('203.0.113.5', PHONE_UA, null, ten), 'a code that does not look like one: address + browser');
+    assert.equal(visitorId('203.0.113.5', PHONE_UA, USER, ten, code), `u:${USER}`, 'signed in: still the account');
+});
+
+test('events from two networks with the same day code are one visitor, and the code is not stored', async () => {
+    const code = 'Qw7eRt2yUi5oPa8sDf3g';
+    for (const ip of [freshIp(), freshIp()])
+        assert.equal((await api('POST', '/api/analytics/events', { ip, headers: { 'User-Agent': PHONE_UA, 'X-Visitor-Day': code }, body: { events: [{ kind: 'page_view', detail: { path: '/map' } }] } })).status, 204);
+    const rows = usageWrites().flatMap(c => c.body);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].visitor, rows[1].visitor, 'one visitor across both addresses');
+    assert.ok(rows[0].visitor.startsWith('a:'));
+    assert.ok(!JSON.stringify(rows).includes(code), 'the code itself never reaches the database');
+    const pre = await fetch(base + '/api/analytics/events', { method: 'OPTIONS', headers: { Origin: 'http://localhost:3000', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type,x-visitor-day', 'X-Forwarded-For': freshIp() } });
+    assert.match(pre.headers.get('access-control-allow-headers') ?? '', /X-Visitor-Day/i, 'browsers are allowed to send it');
+});
+
+test("a person's page lists every time they opened the app or signed in, last 30 days", async () => {
+    const visits = [{ at: '2026-11-07T20:00:00Z', kind: 'session_start', device: 'Mobile', detail: { browser: 'Chrome', os: 'Android' } },
+        { at: '2026-11-07T16:01:00Z', kind: 'signed_in', device: 'Mobile', detail: { method: 'email' } }, { at: '2026-11-07T16:00:00Z', kind: 'session_start', device: 'Mobile', detail: {} }];
+    const profile = (url: string) => url.startsWith('/rest/v1/profiles') && url.includes('select=id') ? [{ id: USER, email: 'rider@example.com', role: 'user', account_status: 'active' }] : undefined;
+    answer = (method, url) => method === 'GET' && url.startsWith('/rest/v1/usage_events') ? visits : profile(url);
+    const r = await api('GET', `/api/admin/users/${USER}`, { token: T.admin });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.visits, visits, '10 am and 2 pm are each their own line');
+    const q = decodeURIComponent(calls.find(c => c.url.startsWith('/rest/v1/usage_events'))!.url);
+    assert.match(q, new RegExp(`user_id=eq\\.${USER}`), 'only this person');
+    assert.match(q, /kind=in\.\(session_start,signed_in,signed_up,signed_out\)/, 'visits and sign-ins only, not everything they did');
+    assert.match(q, /at=gte\./);
+    answer = (method, url) => url.startsWith('/rest/v1/usage_events') ? [404, { code: '42P01', message: 'relation "usage_events" does not exist' }] : profile(url);
+    assert.equal((await api('GET', `/api/admin/users/${USER}`, { token: T.admin })).json.visits, null, 'not set up: shown as such, the page still loads');
+});
+
 test("one visitor's summary is worked out from their events like the database does for a rider", async () => {
     const { summarizeEvents } = await import('../src/models/services/UsageEvents');
     const ev = (at: string, kind: string, session: string | null, detail: Record<string, unknown> = {}) => ({ at, kind, page: '/map', device: 'Mobile', session, detail });

@@ -9,7 +9,7 @@ import { requireAuth, verifyRequest } from '../middleware/requireAuth';
 import { serviceDb } from '../../models/lib/serverDb';
 import { requireStaff } from '../middleware/requireAdmin';
 import { clientIp, rateLimit, isDateOnly, reject } from '../middleware/security';
-import { cleanEvent, cleanPage, cleanSession, deviceOf, isBot, markPresent, saveEvents, visitorId, type UsageRow } from '../../models/services/UsageEvents';
+import { cleanDayCode, cleanEvent, cleanPage, cleanSession, deviceOf, isBot, markPresent, saveEvents, visitorId, type UsageRow } from '../../models/services/UsageEvents';
 
 const router = Router();
 
@@ -21,10 +21,15 @@ async function signedInUserId(req: Request): Promise<string | undefined> {
     return user && user !== 'unavailable' ? user.id : undefined;
 }
 
+/** The app's random code for today, which keeps a signed-out rider one visitor all day (see UsageEvents.visitorId) */
+const dayCode = (req: Request): string | null => cleanDayCode(req.headers['x-visitor-day']);
+/** Who is asking: the account, or the anonymous id for today */
+const visitorOf = (req: Request, userAgent: string, userId: string | undefined): string => visitorId(clientIp(req), userAgent, userId, Date.now(), dayCode(req));
+
 /** This visitor has the app open now (the admin "On the app now" list), under the same id as their usage events */
 function present(req: Request, page: string | null, userId: string | undefined): void {
     const ua = String(req.headers['user-agent'] || '').slice(0, 300);
-    if (!isBot(ua)) markPresent(visitorId(clientIp(req), ua, userId), userId ?? null, page, deviceOf(ua));
+    if (!isBot(ua)) markPresent(visitorOf(req, ua, userId), userId ?? null, page, deviceOf(ua));
 }
 
 /**
@@ -39,7 +44,7 @@ router.post('/beacon', trackLimit, async (req: Request, res: Response) => {
         const userId = await signedInUserId(req);
         present(req, page, userId);
 
-        const sessionId = await registerSession(ip, userAgent, page, userId);
+        const sessionId = await registerSession(ip, userAgent, page, userId, dayCode(req));
         res.json({ ok: true, sessionId });
     } catch (error) {
         console.error('Beacon error:', error);
@@ -59,7 +64,7 @@ router.post('/heartbeat', trackLimit, async (req: Request, res: Response) => {
         const userId = await signedInUserId(req);
         present(req, page ?? null, userId);
 
-        await heartbeat(ip, userAgent, page, userId);
+        await heartbeat(ip, userAgent, page, userId, dayCode(req));
         res.json({ ok: true });
     } catch (error) {
         console.error('Heartbeat error:', error);
@@ -80,7 +85,7 @@ router.post('/events', rateLimit('usage-events', 120), async (req: Request, res:
     if (isBot(userAgent)) { res.status(204).end(); return; }   // crawlers and scripts are not riders
 
     const userId = await signedInUserId(req);
-    const visitor = visitorId(clientIp(req), userAgent, userId), device = deviceOf(userAgent);
+    const visitor = visitorOf(req, userAgent, userId), device = deviceOf(userAgent);
     const rows: UsageRow[] = [];
     for (const e of list) {
         const clean = cleanEvent(e?.kind, e?.detail);
@@ -107,7 +112,7 @@ router.post('/report', rateLimit('rider-report', 5), async (req: Request, res: R
     const userAgent = String(req.headers['user-agent'] || '').slice(0, 300);
     const userId = await signedInUserId(req);
     const row = {
-        user_id: userId ?? null, visitor: visitorId(clientIp(req), userAgent, userId), kind,
+        user_id: userId ?? null, visitor: visitorOf(req, userAgent, userId), kind,
         stop: stop || null, route: route || null, bus: bus || null, note: typeof note === 'string' && note.trim() ? note.trim() : null,
         context: { page: cleanPage(req.body?.page), shown: typeof shown === 'string' ? shown : null, device: deviceOf(userAgent) },
     };

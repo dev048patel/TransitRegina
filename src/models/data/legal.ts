@@ -206,7 +206,10 @@ export const LEGAL_PAGES: Record<'about' | 'privacy' | 'terms', LegalPageContent
             },
             {
                 heading: '10. Your information',
-                paragraphs: ['Our Privacy Policy explains what we collect, why, who handles it, and how to delete it. By agreeing to these terms you also confirm you have read it.'],
+                paragraphs: [
+                    'Our Privacy Policy explains what we collect, why, who handles it, and how to delete it. By agreeing to these terms you also confirm you have read it.',
+                    'If you are signed in, we record each time you open the app or sign in, with the time and your kind of device, and our admins can see it. If you are not signed in, your browser keeps a random code for the day so your visits that day count as one visitor; it is replaced every day and contains nothing about you.',
+                ],
             },
             {
                 heading: '11. Suspending or ending your use',

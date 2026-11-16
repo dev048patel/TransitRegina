@@ -1,7 +1,8 @@
 /**
  * VisitorPage.tsx — Transit Regina  [VIEW — MVC]
- * One signed-out visitor: a summary and every action they took. Their anonymous id changes every Regina day,
- * so this covers one day at most, and two people on the same network and browser share one id.
+ * One signed-out visitor: a summary and every action they took. Their anonymous id stays the same all Regina day
+ * (the app keeps a random code for the day, so changing network doesn't split them) and changes the next day, so
+ * this covers one day at most. Only if their browser blocks storage do two people on one network and browser share an id.
  */
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
@@ -18,7 +19,7 @@ export default function VisitorPage() {
     return (
         <div>
             <Link to="/admin/insights" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 mb-3"><ArrowLeft size={16} /> Insights</Link>
-            <PageHeader title={`Visitor ${id.slice(0, 6)}`} subtitle="Not signed in. Their anonymous id changes every day, so this shows one day at most. No address is stored." />
+            <PageHeader title={`Visitor ${id.slice(0, 6)}`} subtitle="Not signed in. Their anonymous id stays the same all day, even if they come back later, and changes the next day, so this shows one day at most. No address is stored." />
             {error && <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">Could not load this visitor: {error}</p>}
             <Card title="App activity">
                 {!activity ? (!error && <p className="px-5 py-5 text-sm text-slate-500">Loading…</p>)

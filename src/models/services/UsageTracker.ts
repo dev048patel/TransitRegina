@@ -7,6 +7,7 @@
    from; how fast pages load (Core Web Vitals); and any crash, so admins hear about bugs on phones they don't have. */
 import { getCLS, getFCP, getFID, getLCP, getTTFB, type Metric } from 'web-vitals';
 import { supabase } from '../lib/supabase';
+import { visitorDayHeader } from '../lib/visitorDay';
 
 const BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 const FLUSH_MS = 5000, BATCH = 20, MAX_QUEUE = 200;
@@ -28,7 +29,7 @@ if (typeof window !== 'undefined') {
 function send(events: typeof queue, keepalive = false): Promise<void> {
     return fetch(`${BASE_URL}/api/analytics/events`, {
         method: 'POST', keepalive,
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { 'Content-Type': 'application/json', ...visitorDayHeader(), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ events }),
     }).then(() => { }, () => { /* offline or blocked: these events are lost, the app carries on */ });
 }

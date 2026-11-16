@@ -463,20 +463,27 @@ async function historyOf(id: string) {
     return serviceDb().from('security_events').select(cols).in('type', ADMIN_ACTIONS).ilike('message', `%${id}%`).order('created_at', { ascending: false }).limit(30);
 }
 
+/** The sign-in log on a person's page: opening the app (a new visit: first load, or back after 30 minutes away) and signing in, up or out */
+const VISIT_KINDS = ['session_start', 'signed_in', 'signed_up', 'signed_out'];
+
 // ── One person: everything about them in one answer ──
 router.get('/users/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     if (!isUuid(id)) { reject(req, res, 'Invalid user id'); return; }
     const db = serviceDb();
-    const [profile, features, sessions, history] = await Promise.all([
+    const [profile, features, sessions, history, visits] = await Promise.all([
         db.from('profiles').select('id, full_name, email, role, account_status, mobile_number, mobile_verified, sms_opted_in, created_at, last_active').eq('id', id).maybeSingle(),
         db.from('feature_access').select('feature, enabled').eq('user_id', id),
         db.from('visitor_sessions').select('browser, os, device, first_seen, last_seen, page_views').eq('user_id', id).order('last_seen', { ascending: false }).limit(10),
         // ponytail: finds actions on this person by their id in the message text; add a target_id column if the log grows large
         historyOf(id),
+        // Every time they opened the app or signed in, last 30 days: 10:02 am, then again 2:15 pm, each its own line
+        db.from('usage_events').select('at, kind, device, detail').eq('user_id', id).in('kind', VISIT_KINDS)
+            .gte('at', startOfReginaDay(-29).toISOString()).order('at', { ascending: false }).limit(300),
     ]);
     if (!profile.data) { res.status(404).json({ error: 'No such user' }); return; }
-    res.json({ profile: profile.data, features: features.data ?? [], sessions: sessions.data ?? [], history: await withPeople(history.data ?? []) });
+    res.json({ profile: profile.data, features: features.data ?? [], sessions: sessions.data ?? [], history: await withPeople(history.data ?? []),
+        visits: visits.error ? null : visits.data ?? [] });   // null: usage tracking not set up (script 011)
 });
 
 // Looking at personal data that is hidden by default (full IP addresses) is itself recorded

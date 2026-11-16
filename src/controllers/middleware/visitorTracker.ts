@@ -4,7 +4,8 @@
   - Frontend sends POST /beacon on page load and POST /heartbeat every 60s → keeps today's row alive
   - A row not seen for 30 min is "inactive"
 
-  A visitor is the account when signed in, otherwise an anonymous id that changes daily (see UsageEvents.visitorId).
+  A visitor is the account when signed in, otherwise an anonymous id that changes daily (see UsageEvents.visitorId):
+  the app's random code for the day when it sends one, so a rider who changes network is still one visitor.
   It used to be address + browser kept forever: everyone on one Wi-Fi with the same phone was one visitor, a
   returning rider never counted again, and one rider's visits could show on another rider's account.
 
@@ -79,9 +80,10 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 // One record per visitor per Regina day. Built from the parsed browser/system/device, not the raw text the caller
 // sends, so nobody can create unlimited records by changing that text.
-function createFingerprint(ip: string, userAgent: string, userId?: string): string {
+// With the app's code for the day (dayCode) it is the same visitor as in usage_events, whatever their address.
+function createFingerprint(ip: string, userAgent: string, userId?: string, dayCode?: string | null): string {
     const { browser, os, device } = parseUserAgent(userAgent);
-    return `${visitorId(ip, `${browser}/${os}/${device}`, userId)}|${reginaDateKey(Date.now())}`;
+    return `${visitorId(ip, `${browser}/${os}/${device}`, userId, Date.now(), dayCode)}|${reginaDateKey(Date.now())}`;
 }
 
 /** Map a DB row to the VisitorSession shape the frontend expects. */
@@ -109,8 +111,8 @@ function rowToSession(row: any): VisitorSession {
   Called when the frontend sends a beacon (page load).
   Creates a new session or reactivates an existing one.
 */
-export async function registerSession(ip: string, userAgent: string, page?: string, userId?: string): Promise<string> {
-    const sessionId = createFingerprint(ip, userAgent, userId);
+export async function registerSession(ip: string, userAgent: string, page?: string, userId?: string, dayCode?: string | null): Promise<string> {
+    const sessionId = createFingerprint(ip, userAgent, userId, dayCode);
     const { browser, os, device } = parseUserAgent(userAgent);
     const now = new Date().toISOString();
 
@@ -165,8 +167,8 @@ export async function registerSession(ip: string, userAgent: string, page?: stri
   Called every 60s by the frontend heartbeat.
   Keeps the session alive and optionally updates the current page.
 */
-export async function heartbeat(ip: string, userAgent: string, page?: string, userId?: string): Promise<boolean> {
-    const sessionId = createFingerprint(ip, userAgent, userId);
+export async function heartbeat(ip: string, userAgent: string, page?: string, userId?: string, dayCode?: string | null): Promise<boolean> {
+    const sessionId = createFingerprint(ip, userAgent, userId, dayCode);
 
     const { data: session } = await serviceDb()
         .from('visitor_sessions')
@@ -176,7 +178,7 @@ export async function heartbeat(ip: string, userAgent: string, page?: string, us
 
     if (!session) {
         // Session doesn't exist yet — create it via beacon
-        await registerSession(ip, userAgent, page, userId);
+        await registerSession(ip, userAgent, page, userId, dayCode);
         return true;
     }
 

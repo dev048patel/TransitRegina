@@ -46,8 +46,7 @@ test('every page address still opens the app', () => {
     for (const path of ['/', '/map', '/profile', '/admin/insights', '/login', '/no-such-page']) assert.equal(servedTheApp(path), true, path);
 });
 
-test('the retired route and stop pages still go to the homepage', () => {
-    for (const source of ['/routes', '/routes/:path*', '/stops/:path*']) {
-        assert.ok(vercel.redirects.some(r => r.source === source && r.destination === '/' && !r.has), source);
-    }
+test('the route and stop pages are served, not redirected', () => {
+    assert.ok(!vercel.redirects.some(r => /^\/(routes|stops)/.test(r.source)));
+    for (const path of ['/routes', '/routes/1-dieppe-westerra-broad-north', '/stops/some-stop']) assert.equal(servedTheApp(path), true, path);
 });

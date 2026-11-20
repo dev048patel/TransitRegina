@@ -9,7 +9,10 @@
  takes over the page.
 
  Files are written as build/<path>.html; vercel.json's cleanUrls serves them at /<path>.
- It also writes build/sitemap.xml listing every page.
+ It also writes build/sitemap.xml listing every page. A page's lastmod is the day its content last
+ changed: the transit data for the route and stop pages (TRANSIT_DATA_DATE, set by build:transit-data),
+ the policy date for Privacy and Terms. Pages with no such date get none, rather than the build date,
+ which would claim every page changed on every deploy and teach search engines to ignore lastmod.
 */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,6 +24,8 @@ import LegalPage from '../src/views/LegalPage';
 import { ROUTES, SERVED_STOPS, stopInfo } from '../src/models/services/TransitDirectory';
 import { HOME_META, MAP_META, ROUTES_META, STATIC_META, SITE_URL, headTags, routeMeta, stopMeta, teamMeta, type PageMeta } from '../src/models/seo/pageMeta';
 import { TEAM } from '../src/models/data/team';
+import { TRANSIT_DATA_DATE } from '../src/models/data/transitDataDate';
+import { SITE } from '../src/models/data/legal';
 
 const out = path.resolve(process.cwd(), 'build');   // run from the project root, as npm scripts are
 const template = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
@@ -82,12 +87,18 @@ for (const p of ['/about', '/privacy', '/terms']) write(STATIC_META[p], render(p
 write(STATIC_META['/connect']);
 for (const person of TEAM) write(teamMeta(person));
 
-/* The sitemap: every page, with today's date as when it last changed */
-const today = new Date().toISOString().slice(0, 10);
+/* The sitemap: every page, with when its content last changed where we know it */
+const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const policyDate = new Date(SITE.policyDate);   // "October 17, 2026", read as local midnight
+if (Number.isNaN(policyDate.getTime())) throw new Error(`prerender: can't read SITE.policyDate "${SITE.policyDate}"`);
+const lastmod = (p: string): string | null =>
+    p === '/routes' || p.startsWith('/routes/') || p.startsWith('/stops/') ? TRANSIT_DATA_DATE
+        : p === '/privacy' || p === '/terms' ? isoDate(policyDate)
+            : null;
 const priority = (p: string) => (p === '/' ? '1.0' : p === '/routes' ? '0.9' : p.startsWith('/routes/') ? '0.8' : p.startsWith('/stops/') ? '0.6' : '0.5');
 fs.writeFileSync(path.join(out, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${written.map(m => `  <url><loc>${SITE_URL}${m.path === '/' ? '/' : m.path}</loc><lastmod>${today}</lastmod><priority>${priority(m.path)}</priority></url>`).join('\n')}
+${written.map(m => `  <url><loc>${SITE_URL}${m.path === '/' ? '/' : m.path}</loc>${lastmod(m.path) ? `<lastmod>${lastmod(m.path)}</lastmod>` : ''}<priority>${priority(m.path)}</priority></url>`).join('\n')}
 </urlset>
 `);
 

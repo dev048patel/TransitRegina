@@ -46,6 +46,12 @@ router.get('/colors', TransitController.getColors);
  */
 router.get('/live', TransitController.getLiveBuses);
 
+/*
+ route = GET /api/service-notice
+ The notice shown on every page and on the map, set by an admin (public)
+ */
+router.get('/service-notice', TransitController.getServiceNotice);
+
 /**
  * GET /api/plan/arrive-by?from=lat,lng&to=lat,lng&time=HH:MM[&weekday=0-6]
  * The latest scheduled trip that arrives by `time` (Regina time; a time already passed means tomorrow).

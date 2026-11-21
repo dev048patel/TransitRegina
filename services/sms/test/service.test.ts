@@ -526,3 +526,64 @@ test('sender: a trip text is capped by the trip limit, not the commute one', asy
     await runSender(Date.parse(alerts[0].due_at));
     assert.equal(callsTo('rpc/claim_alert')[0].body.p_per_user_cap, 10);
 });
+
+/* ── bus service suspended (main site's Service page → public.service_notice) ── */
+
+const suspendedRow = (c: { table: string; method: string }) => c.table === 'service_notice' && c.method === 'GET' ? [{ suspended: true }] : undefined;
+
+test('suspended: the planner plans nothing and reads no commutes', async () => {
+    setRespond(suspendedRow);
+    const r = await runPlanner(new Date(AT_0430));
+    assert.equal(r.planned, 0);
+    assert.equal(callsTo('weekly_schedules').length, 0);
+    assert.equal(callsTo('rpc/create_plan').length, 0);
+});
+
+test('suspended: the sender holds every pending alert for good and texts nobody', async () => {
+    const { plan, legs, alerts } = realPlan();
+    setRespond(c => suspendedRow(c) ?? (c.table === 'alerts' && c.method === 'PATCH' ? [{ id: 'a1' }, { id: 'a2' }] : undefined)
+        ?? (c.table === 'alerts' && c.method === 'GET' ? [alerts[0]] : c.table === 'trip_plans' ? [plan] : c.table === 'trip_legs' ? legs : undefined));
+    const r = await runSender(Date.parse(alerts[0].due_at) + 5_000);
+    assert.equal(r.sent, 0);
+    assert.equal(r.held, 2);
+    assert.equal(texts.length, 0);
+    const held = callsTo('alerts', 'PATCH')[0];
+    assert.equal(held.body.status, 'suppressed');
+    assert.equal(filter(held, 'status'), 'pending', 'only alerts not sent yet');
+    assert.equal(callsTo('rpc/claim_alert').length, 0);
+});
+
+test('suspended: a one-time trip is refused', async () => {
+    setRespond(c => suspendedRow(c) ?? (c.table === 'outage_days' ? [] : undefined));
+    const r = await startTrip(tripRequest(), AT_0800);
+    assert.equal(!r.ok && r.status, 409);
+    assert.match(!r.ok ? r.error : '', /suspended/);
+    assert.equal(callsTo('rpc/create_plan').length, 0);
+});
+
+test('running: a missing service_notice table (script not run) changes nothing', async () => {
+    const { plan, legs, alerts } = realPlan();
+    senderDb({ alert: alerts[0], plan, legs });
+    const inner = respond;
+    setRespond(c => c.table === 'service_notice' ? [404, { code: 'PGRST205', message: "Could not find the table 'public.service_notice' in the schema cache" }] : inner(c));
+    const r = await runSender(Date.parse(alerts[0].due_at) + 5_000);
+    assert.equal(r.sent, 1);
+});
+
+test('broadcast to listed riders (the "reminders paused" text) checks each one may get texts', async () => {
+    const post = (body: unknown) => fetch(`${base}/internal/broadcast`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer internal-test-token' }, body: JSON.stringify(body) });
+    const U1 = '11111111-1111-4111-8111-111111111111', U2 = '22222222-2222-4222-8222-222222222222';
+    assert.equal((await post({ userIds: [U1], routeNum: '4', message: 'x' })).status, 400, 'a route or a list, not both');
+    assert.equal((await post({ userIds: ['me'], message: 'x' })).status, 400);
+    setRespond(c => {
+        if (c.table === 'profiles') return [{ id: U1, mobile_number: PHONE }];   // U2 isn't opted in
+        if (c.table === 'feature_access') return [{ user_id: U1 }];
+        if (c.table === 'messages' && c.method === 'POST') return [{ id: 'm1' }];
+        return undefined;
+    });
+    const r = await post({ userIds: [U1, U2, U1], message: 'Transit Regina: City bus service is suspended, so your commute reminders are paused.' });
+    assert.deepEqual(await r.json(), { ok: true, sent: 1 });
+    assert.equal(callsTo('weekly_schedules').length, 0, 'the list is used as given');
+    await settle(300);
+    assert.deepEqual(texts.map(t => t.to), [PHONE]);
+});

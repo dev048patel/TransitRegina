@@ -36,6 +36,8 @@ import { metaForPath } from './models/seo/pageMeta';
 import PublicOnlyRoute from './views/components/PublicOnlyRoute';
 import AdminRoute from './views/components/AdminRoute';
 import ProfilePage from './views/auth/ProfilePage';
+import ServiceNoticeBanner from './views/components/ServiceNoticeBanner';
+import { useServiceNoticeController } from './controllers/useServiceNoticeController';
 import logo from './New-Image.jpeg';
 
 /* ── Lazy-loaded pages (code-split per route) ────────────────────── */
@@ -88,6 +90,9 @@ function AppRoutes() {
 
     const { isLoading } = useAuth();
     useAnalyticsBeacon();
+    /* The admin's service notice (e.g. "bus service is suspended"): a banner on every public page; the map shows it itself */
+    const notice = useServiceNoticeController();
+    const noticeHere = !pathname.startsWith('/map') && !pathname.startsWith('/admin');
 
     // Register service worker once on first load (enables push notifications)
     React.useEffect(() => {
@@ -223,6 +228,7 @@ function AppRoutes() {
                 <Route path="*" element={<NotFoundPage />} />
 
             </Routes>
+            {noticeHere && <ServiceNoticeBanner notice={notice} />}
         </Suspense>
     );
 }

@@ -11,6 +11,7 @@ import { setTwilioClient, SendError, TwilioLike } from '../src/delivery/twilio';
 import { setMailer, Email } from '../src/delivery/email';
 import { _clearTransitLiveCache } from '../src/transit/transitLive';
 import { _clearSendSettings } from '../src/settings';
+import { _clearServiceNotice } from '../src/serviceNotice';
 
 export interface Call { method: string; table: string; query: URLSearchParams; schema: string; body: any; order: number }
 type Answer = unknown | [status: number, body: unknown];
@@ -98,6 +99,7 @@ export function resetFakes() {
     process.env.SMS_ENABLED = 'true';
     Object.assign(sendRow, { dry_run: false, allowlist: [] });
     _clearSendSettings();
+    _clearServiceNotice();
 }
 
 /** The calls to one table (and method), in order */

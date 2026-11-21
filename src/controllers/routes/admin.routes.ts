@@ -12,6 +12,7 @@ import { SecurityEventService } from '../../models/services/SecurityEventService
 import { HealthService } from '../../models/services/HealthService';
 import { RealTimeService } from '../../models/services/RealTimeService';
 import { SmsOutageService } from '../../models/services/SmsOutageService';
+import { ServiceNoticeService, CITY_UPDATES_URL, MAX_MESSAGE } from '../../models/services/ServiceNoticeService';
 import { reginaDateKey, startOfReginaDay } from '../../models/services/ReginaTime';
 import { SmsAccessService, SMS_FEATURE } from '../../models/services/SmsAccessService';
 import { CLIENT_EVENTS, SERVER_EVENTS, presentWithin, summarizeEvents, type VisitorEvent } from '../../models/services/UsageEvents';
@@ -27,7 +28,7 @@ const audit = (req: Request, type: string, message: string, severity: 'info' | '
     SecurityEventService.record({ type, severity, message, ip: clientIp(req), userId: req.user!.id, targetUser: target, path: req.originalUrl });
 
 /** Things an admin did (as opposed to things that happened to the site). Shown in the activity log. */
-const ADMIN_ACTIONS = ['user_deleted', 'role_changed', 'status_changed', 'user_updated', 'feature_access_changed', 'route_changed', 'sms_broadcast', 'sms_outage_declared', 'sms_settings_changed', 'personal_data_viewed', 'events_handled', 'note_added', 'note_deleted', 'reports_handled'];
+const ADMIN_ACTIONS = ['user_deleted', 'role_changed', 'status_changed', 'user_updated', 'feature_access_changed', 'route_changed', 'sms_broadcast', 'sms_outage_declared', 'sms_settings_changed', 'service_notice_changed', 'personal_data_viewed', 'events_handled', 'note_added', 'note_deleted', 'reports_handled'];
 /** An optional reason typed by the admin, tidied for the log. */
 const reasonOf = (req: Request) => (typeof req.body?.reason === 'string' && req.body.reason.trim() ? ` Reason: ${req.body.reason.trim().slice(0, 200)}` : '');
 const countOf = async (q: PromiseLike<{ count: number | null }>) => (await q).count ?? 0;
@@ -707,6 +708,66 @@ router.patch('/sms/settings', requireAdmin, async (req: Request, res: Response) 
     ].filter(Boolean);
     if (changes.length) await audit(req, 'sms_settings_changed', `Admin ${changes.join('; ')}.${reasonOf(req)}`, next.dry_run ? 'info' : 'warning');
     res.json({ ok: true, settings: { dryRun: next.dry_run, allowlist: next.allowlist } });
+});
+
+// ── Service notice: the message on every page and the map, and "standard bus service is suspended" ──
+router.get('/service-notice', async (_req: Request, res: Response) => {
+    ServiceNoticeService.clearCache();   // the admin sees what is saved, not a value cached for riders
+    res.json({ notice: await ServiceNoticeService.get(), cityUpdatesUrl: CITY_UPDATES_URL });
+});
+
+// Saving a suspension holds every commute reminder and tells each rider with a saved commute once (an
+// email, and a text if they get text alerts). It reaches riders, so starting one needs an authenticator
+// code entered in the last few minutes. Ending one, or changing only the wording, never does.
+router.patch('/service-notice', requireAdmin, async (req: Request, res: Response) => {
+    const { active, suspended, message, linkUrl } = req.body ?? {};
+    if (typeof active !== 'boolean' || typeof suspended !== 'boolean') { reject(req, res, 'Invalid notice'); return; }
+    const text = typeof message === 'string' ? message.replace(/\s+/g, ' ').trim() : '';
+    if (text.length > MAX_MESSAGE) { reject(req, res, `The message must be ${MAX_MESSAGE} characters or fewer`); return; }
+    if ((active || suspended) && !text) { reject(req, res, 'Write the message riders will see'); return; }
+    let link: string | null = null;
+    if (linkUrl !== undefined && linkUrl !== null && linkUrl !== '') {
+        try {
+            const u = new URL(String(linkUrl));
+            if (u.protocol !== 'https:' || String(linkUrl).length > 300) throw new Error();
+            link = u.toString();
+        } catch { reject(req, res, 'The link must be an https:// address'); return; }
+    }
+
+    ServiceNoticeService.clearCache();
+    const before = await ServiceNoticeService.get().catch(() => null);
+    const starting = suspended && !before?.suspended;
+    if (starting && Date.now() / 1000 - req.user!.twoStepAt > 10 * 60) {
+        res.status(403).json({ error: 'Enter your authenticator code again to do this', code: 'fresh_two_step_required' });
+        return;
+    }
+
+    let saved;
+    try {
+        saved = await ServiceNoticeService.save({ active: active || suspended, suspended, message: text, linkUrl: link }, req.user!.id);
+    } catch (err) {
+        console.error('[Admin] Service notice save error:', (err as Error).message);
+        res.status(500).json({ error: 'Could not save the notice. Has docs/security/service_notice_001.sql been run?' });
+        return;
+    }
+    const { notice } = saved, was = saved.before;
+    const changes = [
+        notice.suspended && !was.suspended && 'marked standard bus service as suspended: commute reminders are held',
+        !notice.suspended && was.suspended && 'marked bus service as running again: commute reminders resume',
+        notice.active && !was.active && !notice.suspended && 'turned the service notice on',
+        !notice.active && was.active && 'turned the service notice off',
+        notice.active && was.active && (notice.message !== was.message || notice.linkUrl !== was.linkUrl) && 'changed the service notice',
+    ].filter(Boolean);
+
+    // Every save during a suspension reaches the riders not told yet, so a save is also the retry
+    let told = null;
+    if (notice.suspended) {
+        try { told = await ServiceNoticeService.tellRiders(notice); }
+        catch (err) { console.error('[Admin] Telling riders failed:', (err as Error).message); told = { riders: 0, emailed: 0, texted: 0, failed: -1 }; }
+    }
+    const reach = told && (told.emailed || told.texted) ? ` ${told.emailed} rider${told.emailed === 1 ? '' : 's'} emailed, ${told.texted} texted.` : '';
+    if (changes.length || reach) await audit(req, 'service_notice_changed', `Admin ${changes.join('; ') || 'saved the service notice'}.${reach}${reasonOf(req)}`, notice.suspended || was.suspended ? 'warning' : 'info');
+    res.json({ ok: true, notice, told });
 });
 
 export default router;

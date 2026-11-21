@@ -14,6 +14,7 @@ import { LatLng } from '../transit/planner';
 import { ChosenLeg, journeyFor } from '../transit/chosenTrip';
 import { buildPlan } from '../alerts/buildAlerts';
 import { reginaDate, reginaMinutes } from '../time';
+import { serviceSuspended } from '../serviceNotice';
 
 export interface TripRequest { userId: string; legs: ChosenLeg[]; origin: LatLng; destination: LatLng; destinationName: string | null }
 export type TripResult =
@@ -52,6 +53,7 @@ export async function startTrip(req: TripRequest, now = new Date()): Promise<Tri
     if (!tt.covers(date)) return { ok: false, status: 503, error: "The text alert timetable is out of date, so trips can't be texted today." };
     const { data: outage } = await sms().from('outage_days').select('service_date').eq('service_date', date).maybeSingle();
     if (outage) return { ok: false, status: 409, error: 'Text alerts are off for today.' };
+    if (await serviceSuspended(now.getTime())) return { ok: false, status: 409, error: "Regina's bus service is suspended, so there are no buses to text you about." };
 
     const journey = journeyFor(tt, date, req.legs, nowMin, req.origin, req.destination);
     if (!journey) return { ok: false, status: 409, error: "These buses don't run again today, so there is nothing to text." };

@@ -149,3 +149,19 @@ export async function sendRiderEmail(to: string, subject: string, body: { html: 
     });
     if (!res.ok) throw new Error(`Resend answered ${res.status}`);
 }
+
+export interface BatchEmail { to: string; subject: string; text: string; html?: string }
+
+/** Resend's batch endpoint: up to 100 separate emails in one call, so riders never see each other's address */
+export async function sendRiderBatch(emails: BatchEmail[]): Promise<void> {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) throw new Error('RESEND_API_KEY is not set');
+    const from = riderFrom(), reply_to = riderReplyTo();   // riders' emails come from the rider address, not alerts@
+    const res = await fetch('https://api.resend.com/emails/batch', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(emails.map(e => ({ from, reply_to, to: [e.to], subject: e.subject, text: e.text, ...(e.html ? { html: e.html } : {}) }))),
+        signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) throw new Error(`Resend answered ${res.status}`);
+}

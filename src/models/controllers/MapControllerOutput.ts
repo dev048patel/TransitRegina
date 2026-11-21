@@ -10,6 +10,8 @@ import { WeatherSnapshot } from '../services/WeatherService';
 export interface MapControllerOutput {
     /** True after three failed polls in a row */
     liveDown: boolean;
+    /** The feed answers, but has listed no buses for a few polls in a row */
+    noBusesReporting: boolean;
     isLoaded: boolean;
     loadError: Error | undefined;
     center: Coordinates;

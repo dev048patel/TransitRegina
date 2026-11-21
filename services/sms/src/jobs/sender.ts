@@ -13,6 +13,7 @@ import { deliver } from '../delivery/outbox';
 import { ERROR_OPTED_OUT } from '../delivery/twilio';
 import { emailAdmins } from '../delivery/email';
 import { smsRevoked } from '../access';
+import { serviceSuspended } from '../serviceNotice';
 import { AlertDb, AlertKind, LegDb, PlanDb } from '../types';
 
 /** How long after its due time an alert is still worth sending */
@@ -33,6 +34,7 @@ export async function runSender(now = Date.now()): Promise<SenderResult> {
     const result: SenderResult = { sent: 0, skipped: 0, failed: 0, held: 0 };
     const cfg = config();
     if (!cfg.enabled) return result;
+    if (await suppressWhileSuspended(now, result)) return result;
 
     const due = must(await sms().from('alerts').select('id, plan_id, leg_id, user_id, service_date, kind, due_at, status, attempts')
         .eq('status', 'pending').lte('due_at', new Date(now).toISOString()).order('due_at').limit(BATCH), 'reading due alerts') as AlertDb[];
@@ -105,6 +107,20 @@ async function sendOne(alert: AlertDb, now: number, result: SenderResult): Promi
     await sms().from('alerts').update({ status: 'failed', updated_at: stamp }).eq('id', alert.id);
     result.failed++;
     console.error(`[Sender] Alert ${alert.id} not sent (${d.code ?? 'no code'}): ${d.error}`);
+}
+
+/**
+ * Bus service suspended: every alert still pending is held for good (suppressed), including ones planned
+ * before the suspension began. Returns true when it is suspended, so nothing is sent.
+ */
+async function suppressWhileSuspended(now: number, result: SenderResult): Promise<boolean> {
+    if (!(await serviceSuspended(now))) return false;
+    const { data, error } = await sms().from('alerts').update({ status: 'suppressed', updated_at: new Date(now).toISOString() })
+        .eq('status', 'pending').select('id');
+    if (error) throw new Error(`suppressing alerts: ${error.message}`);
+    if (data?.length) console.log(`[Sender] Bus service is suspended: ${data.length} pending alert${data.length === 1 ? '' : 's'} held`);
+    result.held += data?.length ?? 0;
+    return true;
 }
 
 /** Emails admins once at 80% of the day's quota and once at 100% */

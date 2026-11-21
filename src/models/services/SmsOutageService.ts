@@ -18,7 +18,7 @@ import { serviceDb, hasServiceKey } from '../lib/serverDb';
 import { SecurityEventService } from './SecurityEventService';
 import { reginaDateKey } from './ReginaTime';
 import { SITE } from '../data/legal';
-import { riderEmail, riderFrom, riderReplyTo } from './RiderEmail';
+import { riderEmail, sendRiderBatch } from './RiderEmail';
 import { smsRevokedIds } from './SmsAccessService';
 
 const sms = () => serviceDb().schema('sms');
@@ -36,19 +36,7 @@ const reginaWeekday = (now: number) => new Date(now - OFFSET_MS).getUTCDay();
 export interface OutageEmail { to: string; subject: string; text: string; html?: string }
 type BatchMailer = (emails: OutageEmail[]) => Promise<void>;
 
-/** Resend's batch endpoint: up to 100 separate emails in one call, so riders never see each other's address */
-const resendBatch: BatchMailer = async emails => {
-    const key = process.env.RESEND_API_KEY;
-    if (!key) throw new Error('RESEND_API_KEY is not set');
-    const from = riderFrom(), reply_to = riderReplyTo();   // riders' emails come from the rider address, not alerts@
-    const res = await fetch('https://api.resend.com/emails/batch', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(emails.map(e => ({ from, reply_to, to: [e.to], subject: e.subject, text: e.text, ...(e.html ? { html: e.html } : {}) }))),
-        signal: AbortSignal.timeout(20_000),
-    });
-    if (!res.ok) throw new Error(`Resend answered ${res.status}`);
-};
+const resendBatch: BatchMailer = sendRiderBatch;
 let mailer: BatchMailer = resendBatch;
 
 /** The email from the design doc, word for word */

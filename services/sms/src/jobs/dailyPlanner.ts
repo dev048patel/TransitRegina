@@ -11,6 +11,7 @@ import { timetable } from '../transit/timetable';
 import { planArriveBy } from '../transit/planner';
 import { buildPlan } from '../alerts/buildAlerts';
 import { emailAdmins } from '../delivery/email';
+import { serviceSuspended } from '../serviceNotice';
 import { parseHhmm, reginaDate, reginaMinutes, reginaWeekday } from '../time';
 
 /** Planning a commute that starts in under this many minutes is pointless: the rider is already on the way */
@@ -20,13 +21,19 @@ interface Schedule { id: string; user_id: string; arrive_by: string; depart_by: 
 interface Profile { id: string; mobile_number: string | null; sms_opted_in: boolean | null; mobile_verified: boolean | null; account_status: string | null }
 interface Place { id: string; name: string; lat: number; lng: number }
 
-let warnedExpiredOn = '';
+let warnedExpiredOn = '', loggedSuspendedOn = '';
 
 export interface PlannerResult { date: string; planned: number; alreadyPlanned: number; tooLate: number; ineligible: number; failed: number }
 
 export async function runPlanner(now = new Date()): Promise<PlannerResult> {
     const date = reginaDate(now), nowMin = reginaMinutes(now);
     const result: PlannerResult = { date, planned: 0, alreadyPlanned: 0, tooLate: 0, ineligible: 0, failed: 0 };
+    // Standard bus service suspended (main site's Service page): plan nothing, so no rider is sent out for
+    // a bus that isn't running. Commutes still to come are planned on the first run after it ends.
+    if (await serviceSuspended(now.getTime())) {
+        if (loggedSuspendedOn !== date) { loggedSuspendedOn = date; console.log(`[Planner] ${date}: bus service is suspended, nothing planned`); }
+        return result;
+    }
     const tt = timetable();
     if (!tt.covers(date)) {
         // Planning on an expired timetable would tell every rider "no buses". Stop and say why instead.

@@ -1755,3 +1755,107 @@ test('deleting an account also deletes problem reports and notes, and does not s
     answer = (method, url) => method === 'DELETE' && url.startsWith('/rest/v1/rider_reports') ? [500, { code: 'XX000', message: 'disk full' }] : url.startsWith('/auth/v1/token') ? signedIn : undefined;
     assert.equal((await api('DELETE', '/api/auth/account', { token: T.user, body: { password: 'correct-password' } })).status, 500, 'a real failure still stops it');
 });
+
+/* ── service notice: the banner on every page, and "standard bus service is suspended" ── */
+
+const noticeSvc = async () => (await import('../src/models/services/ServiceNoticeService')).ServiceNoticeService;
+const NOTICE_TABLE = /^\/rest\/v1\/service_notice(\?|$)/;
+
+test('the service notice is public, and is empty until an admin sets one', async () => {
+    const svc = await noticeSvc();
+    svc.clearCache();
+    const none = await api('GET', '/api/service-notice');
+    assert.equal(none.status, 200);
+    assert.deepEqual(none.json, { active: false });
+
+    svc.clearCache();
+    answer = (m, u) => m === 'GET' && NOTICE_TABLE.test(u) ? [404, { code: 'PGRST205', message: "Could not find the table 'public.service_notice' in the schema cache" }] : undefined;
+    assert.deepEqual((await api('GET', '/api/service-notice')).json, { active: false }, 'before the script is run');
+
+    svc.clearCache();
+    answer = (m, u) => m === 'GET' && NOTICE_TABLE.test(u)
+        ? [{ active: true, suspended: true, message: 'All standard routes are out of service.', link_url: null, started_at: '2026-11-21T20:00:00Z', updated_at: '2026-11-21T20:00:00Z' }] : undefined;
+    const r = await api('GET', '/api/service-notice');
+    assert.equal(r.json.active, true);
+    assert.equal(r.json.suspended, true);
+    assert.equal(r.json.message, 'All standard routes are out of service.');
+    assert.ok(!('startedAt' in r.json), 'riders see the notice, not its bookkeeping');
+    assert.match(r.headers.get('cache-control') ?? '', /max-age=30/);
+    svc.clearCache();
+});
+
+test('only an admin can change the service notice, and starting a suspension needs a fresh code', async () => {
+    const body = { active: true, suspended: false, message: 'Detour on Albert St.' };
+    for (const token of [T.user, T.viewer]) assert.equal((await api('PATCH', '/api/admin/service-notice', { token, body })).status, 403);
+    assert.equal((await api('PATCH', '/api/admin/service-notice', { token: T.admin, body: { ...body, message: '  ' } })).status, 400, 'a notice needs words');
+    assert.equal((await api('PATCH', '/api/admin/service-notice', { token: T.admin, body: { ...body, linkUrl: 'http://example.com' } })).status, 400, 'https only');
+    assert.equal((await api('PATCH', '/api/admin/service-notice', { token: T.admin, body: { ...body, message: 'x'.repeat(401) } })).status, 400);
+    const stale = await api('PATCH', '/api/admin/service-notice', { token: T.adminStaleCode, body: { ...body, suspended: true } });
+    assert.equal(stale.status, 403);
+    assert.equal(stale.json.code, 'fresh_two_step_required');
+    assert.ok(!calls.some(c => NOTICE_TABLE.test(c.url) && c.method === 'POST'), 'nothing saved');
+});
+
+test('marking service suspended tells each rider with a commute once: an email, and a text if they get text alerts', async () => {
+    const svc = await noticeSvc();
+    svc.clearCache();
+    const emails: { to: string; subject: string; text: string; html?: string }[] = [];
+    const texted: { id: string; phone: string; text: string }[] = [];
+    svc._setMailer(async e => { emails.push(...e); });
+    svc._setTexter(async (riders, text) => { texted.push(...riders.map(r => ({ ...r, text }))); return riders.length; });
+    let row: any = { active: false, suspended: false, message: '', link_url: null, started_at: null, updated_at: null };
+    const told = new Set<string>();
+    answer = (m, u, b) => {
+        if (u.startsWith('/rest/v1/service_notice_told') && m === 'POST') {
+            const fresh = (b as { user_id: string }[]).filter(r => !told.has(r.user_id));
+            fresh.forEach(r => told.add(r.user_id));
+            return fresh.map(r => ({ user_id: r.user_id }));
+        }
+        if (NOTICE_TABLE.test(u) && m === 'GET') return [row];
+        if (NOTICE_TABLE.test(u) && m === 'POST') { row = { ...row, ...b }; return [row]; }
+        if (u.startsWith('/rest/v1/weekly_schedules')) return [{ user_id: USER }, { user_id: OTHER }, { user_id: USER }];
+        if (u.startsWith('/rest/v1/profiles') && u.includes('sms_opted_in')) return [
+            { id: USER, email: 'rider@example.com', mobile_number: '+13065550199', sms_opted_in: true, mobile_verified: true, account_status: 'active' },
+            { id: OTHER, email: 'other@example.com', mobile_number: null, sms_opted_in: false, mobile_verified: false, account_status: 'active' },
+        ];
+        return undefined;
+    };
+    try {
+        const message = 'All standard Transit routes are out of service from Monday. Paratransit continues.';
+        const r = await api('PATCH', '/api/admin/service-notice', { token: T.admin, body: { active: true, suspended: true, message, linkUrl: 'https://www.regina.ca/transit', reason: 'City notice' } });
+        assert.equal(r.status, 200, JSON.stringify(r.json));
+        assert.deepEqual(r.json.told, { riders: 2, emailed: 2, texted: 1, failed: 0 });
+        assert.equal(row.suspended, true);
+        assert.ok(row.started_at, 'the suspension gets a start time');
+        assert.equal(row.updated_by, ADMIN);
+
+        assert.deepEqual(emails.map(e => e.to).sort(), ['other@example.com', 'rider@example.com']);
+        assert.match(emails[0].subject, /bus service is suspended/i);
+        assert.ok(emails[0].text.includes(message), "the admin's words are in the email");
+        assert.match(emails[0].html ?? '', /href="https:\/\/www\.regina\.ca\/transit"/);
+        assert.deepEqual(texted.map(t => t.id), [USER], 'a text only for the rider who gets text alerts');
+        assert.ok(texted[0].text.length <= 160, 'one segment');
+
+        assert.equal(await svc.isSuspended(), true, 'commute reminders are held');
+        await settle();
+        assert.ok(events.recent().some(e => e.type === 'service_notice_changed' && e.userId === ADMIN));
+
+        // Changing the wording during the same suspension tells nobody again, and needs no fresh code
+        const startedAt = row.started_at;
+        const again = await api('PATCH', '/api/admin/service-notice', { token: T.adminStaleCode, body: { active: true, suspended: true, message: message + ' Updated.' } });
+        assert.equal(again.status, 200);
+        assert.equal(row.started_at, startedAt, 'still the same suspension');
+        assert.deepEqual(again.json.told, { riders: 2, emailed: 0, texted: 0, failed: 0 });
+        assert.equal(emails.length, 2);
+
+        // Service running again: reminders resume, nobody is emailed
+        const end = await api('PATCH', '/api/admin/service-notice', { token: T.adminStaleCode, body: { active: false, suspended: false, message: '' } });
+        assert.equal(end.status, 200);
+        assert.equal(end.json.told, null);
+        assert.equal(row.suspended, false);
+        assert.equal(row.started_at, null);
+        svc.clearCache();
+        assert.equal(await svc.isSuspended(), false);
+        assert.equal(emails.length, 2);
+    } finally { svc._setMailer(null); svc._setTexter(null); svc.clearCache(); }
+});

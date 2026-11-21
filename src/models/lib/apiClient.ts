@@ -13,7 +13,7 @@ import { visitorDayHeader } from './visitorDay';
 const BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
 /** The only endpoints that work without a login; every other one answers 401 to a signed-out caller. */
-const PUBLIC_PATHS = ['/api/analytics/beacon', '/api/analytics/heartbeat', '/api/analytics/report', '/api/auth/login-mobile', '/api/plan/arrive-by', '/api/walk'];
+const PUBLIC_PATHS = ['/api/analytics/beacon', '/api/analytics/heartbeat', '/api/analytics/report', '/api/auth/login-mobile', '/api/plan/arrive-by', '/api/walk', '/api/service-notice'];
 
 async function authHeaders(path: string): Promise<Record<string, string>> {
     const { data: { session } } = await supabase.auth.getSession();

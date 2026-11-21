@@ -15,6 +15,7 @@ import { HealthService } from './models/services/HealthService';
 import { checkUsage, sendWeeklyDigest } from './models/services/UsageAlerts';
 import { SecurityEventService } from './models/services/SecurityEventService';
 import { SmsOutageService } from './models/services/SmsOutageService';
+import { ServiceNoticeService } from './models/services/ServiceNoticeService';
 import { smsRevokedIds } from './models/services/SmsAccessService';
 import { isPushEndpoint } from './controllers/middleware/security';
 
@@ -66,6 +67,10 @@ schedule('* * * * *', async () => {
     const target = addMins(h, m, 15);
 
     try {
+        // Standard bus service suspended (admin Service page): no reminders for buses that aren't running.
+        // Riders were told once when the suspension started; reminders resume when it is switched off.
+        if (await ServiceNoticeService.isSuspended()) return;
+
         // Use .like() so "HH:MM" matches both text "HH:MM" and time "HH:MM:00"
         // regardless of how Supabase stores the column type.
         const { data: schedules } = await serviceDb()

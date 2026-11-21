@@ -14,6 +14,7 @@ import WeatherBanner from './WeatherBanner';
 import LiveStatus from './components/transit/LiveStatus';
 import LocationPrompt from './components/transit/LocationPrompt';
 import { useLocationConsent } from '../controllers/useLocationConsent';
+import { useServiceNoticeController } from '../controllers/useServiceNoticeController';
 
 export default function MapPage() {
     const {
@@ -21,8 +22,9 @@ export default function MapPage() {
         zoom, setZoom, stops, routes, selectedRoute, setSelectedRoute,
         routePaths, liveBuses, handlePlaceSelect, handleMapPlacePick, selectedPlaceMarker,
         setSelectedPlaceMarker, currentZoom, onZoomChanged,
-        activeDetours, weather, liveDown, linkedStop,
+        activeDetours, weather, liveDown, noBusesReporting, linkedStop,
     } = useMapController();
+    const notice = useServiceNoticeController();
     // Every visit to the map asks for location again, unless the rider already allowed it
     const { askAgainOnMapOpen } = useLocationConsent();
     React.useEffect(askAgainOnMapOpen, [askAgainOnMapOpen]);
@@ -31,7 +33,7 @@ export default function MapPage() {
         <>
         <WeatherBanner weather={weather} />
         <DepartureReminderBanner />
-        <LiveStatus liveDown={liveDown} />
+        <LiveStatus liveDown={liveDown} noBuses={noBusesReporting} notice={notice} />
         <LocationPrompt />
         <MapView
             isLoaded={isLoaded}

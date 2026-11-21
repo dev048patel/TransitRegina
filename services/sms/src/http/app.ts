@@ -4,7 +4,7 @@
  *   GET  /health               for Railway and the main API (no secrets in it)
  *   POST /twilio/inbound       texts riders send back (STOP, START, HELP)
  *   POST /twilio/status        delivery receipts for texts we sent
- *   POST /internal/broadcast   an admin's text to everyone on a route, forwarded by the main API
+ *   POST /internal/broadcast   an admin's text to everyone on a route, or to listed riders, forwarded by the main API
  *
  * Twilio's routes accept only requests carrying a valid Twilio signature; /internal/* only the
  * shared SMS_SERVICE_TOKEN.
@@ -95,20 +95,28 @@ export function createApp() {
         res.sendStatus(204);
     });
 
-    app.post('/internal/broadcast', express.json({ limit: '10kb' }), internalOnly, async (req, res) => {
+    // An admin's text to everyone on a route ({ routeNum }), or to the riders the main API lists ({ userIds }:
+    // the one "commute reminders are paused" text when bus service is suspended)
+    app.post('/internal/broadcast', express.json({ limit: '100kb' }), internalOnly, async (req, res) => {
         if (!config().enabled) { res.status(503).json({ error: 'SMS sending is turned off (SMS_ENABLED=false)' }); return; }
-        const { routeNum, message } = (req.body ?? {}) as { routeNum?: unknown; message?: unknown };
-        if (typeof routeNum !== 'string' || !/^[A-Za-z0-9]{1,6}$/.test(routeNum) || typeof message !== 'string' || !message.trim()) {
-            res.status(400).json({ error: 'routeNum and message are required' }); return;
+        const { routeNum, userIds: listed, message } = (req.body ?? {}) as { routeNum?: unknown; userIds?: unknown; message?: unknown };
+        const byRoute = typeof routeNum === 'string' && /^[A-Za-z0-9]{1,6}$/.test(routeNum);
+        const byList = Array.isArray(listed) && listed.length > 0 && listed.length <= 2000 && listed.every(id => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id));
+        if (byRoute === byList || typeof message !== 'string' || !message.trim()) {
+            res.status(400).json({ error: 'routeNum or userIds, and message, are required' }); return;
         }
         const text = toGsm(message);
         if (text.length > 160) { res.status(400).json({ error: 'Message must be 160 characters or fewer (single SMS segment)' }); return; }
 
-        // Riders on this route at any point of their commute (route_list), not only as their first bus
-        const { data: schedules, error } = await appDb().from('weekly_schedules').select('user_id')
-            .or(`route_num.eq.${routeNum},route_list.cs.{${routeNum}}`).eq('enabled', true);
-        if (error) { res.status(500).json({ error: 'Could not read schedules' }); return; }
-        const userIds = [...new Set((schedules ?? []).map(s => s.user_id as string))];
+        let userIds: string[];
+        if (byList) userIds = [...new Set(listed as string[])];
+        else {
+            // Riders on this route at any point of their commute (route_list), not only as their first bus
+            const { data: schedules, error } = await appDb().from('weekly_schedules').select('user_id')
+                .or(`route_num.eq.${routeNum},route_list.cs.{${routeNum}}`).eq('enabled', true);
+            if (error) { res.status(500).json({ error: 'Could not read schedules' }); return; }
+            userIds = [...new Set((schedules ?? []).map(s => s.user_id as string))];
+        }
         const profiles = await inChunks(userIds, async ids => (await appDb().from('profiles').select('id, mobile_number')
             .in('id', ids).eq('sms_opted_in', true).eq('mobile_verified', true).not('mobile_number', 'is', null)).data ?? []);
         const revoked = await smsRevoked(userIds).catch(() => null);
@@ -124,7 +132,7 @@ export function createApp() {
                     .catch(err => console.error('[Broadcast] Send failed:', (err as Error).message));
                 await new Promise(r => setTimeout(r, 100));
             }
-            console.log(`[Broadcast] Route ${routeNum}: ${recipients.length} texts handed out`);
+            console.log(`[Broadcast] ${byRoute ? `Route ${routeNum}` : 'Listed riders'}: ${recipients.length} texts handed out`);
         })();
     });
 

@@ -11,6 +11,7 @@ import { ArriveByService } from '../models/services/ArriveByService';
 import { StopPredictionService } from '../models/services/StopPredictionService';
 import { WalkRouteService } from '../models/services/WalkRouteService';
 import { setOverride } from '../models/services/routeOverrides';
+import { ServiceNoticeService } from '../models/services/ServiceNoticeService';
 import { SecurityEventService } from '../models/services/SecurityEventService';
 import { clientIp, isText, reject } from './middleware/security';
 
@@ -71,6 +72,18 @@ export const getLiveBuses = async (req: Request, res: Response) => {
     } catch (error) {
         // The feed (TransitLive) failed, not us: the map keeps showing its last positions
         res.status(502).json({ error: 'Failed to fetch live buses' });
+    }
+};
+
+// getServiceNotice : the notice shown on every page and on the map (for example "bus service is suspended").
+// Public, and cached by browsers for 30 s. No notice, or no table yet, answers { active: false }.
+export const getServiceNotice = async (_req: Request, res: Response) => {
+    try {
+        const n = await ServiceNoticeService.get();
+        res.set('Cache-Control', 'public, max-age=30');
+        res.json(n.active ? { active: true, suspended: n.suspended, message: n.message, linkUrl: n.linkUrl, updatedAt: n.updatedAt } : { active: false });
+    } catch {
+        res.json({ active: false });   // a notice that can't be read must never break the page
     }
 };
 

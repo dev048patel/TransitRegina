@@ -48,6 +48,9 @@ export const useMapController = (): MapControllerOutput => {
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   /* When live positions last arrived, and whether they have stopped (three failed polls in a row) */
   const [liveDown, setLiveDown] = useState(false);
+  // The feed answers but lists no buses (night, or service suspended): the map says so instead of looking broken
+  const [noBusesReporting, setNoBusesReporting] = useState(false);
+  const emptyPolls = useRef(0);
   const failedPolls = useRef(0);
   /* Links from the route and stop pages: /map?route=4 shows route 4, /map?stop=0742 opens that stop */
   const [linkedStop, setLinkedStop] = useState<Stop | null>(null);
@@ -184,6 +187,8 @@ export const useMapController = (): MapControllerOutput => {
           if (!liveTimed.current) { liveTimed.current = true; trackTiming('live_feed', pollStarted); }
           failedPolls.current = 0;
           setLiveDown(false);
+          emptyPolls.current = data.length ? 0 : emptyPolls.current + 1;
+          setNoBusesReporting(emptyPolls.current >= 4);   // about 6 seconds of empty answers
         } else {
           failedPolls.current++;
           if (failedPolls.current >= 3) setLiveDown(true);
@@ -274,6 +279,7 @@ export const useMapController = (): MapControllerOutput => {
   // 3. Return prepared data for the View
   return {
     liveDown,
+    noBusesReporting,
     isLoaded,
     loadError,
     center,

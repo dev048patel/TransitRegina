@@ -13,6 +13,7 @@ import { useRouteManagerController } from '../../controllers/admin/useRouteManag
 import { Route } from '../../models/admin/AdminTypes';
 import { useAuth } from '../../models/context/AuthContext';
 import { Navigate } from 'react-router-dom';
+import ServiceNoticeCard from './ServiceNoticeCard';
 
 export default function RouteManager() {
     // Only for changing settings: view-only admins go back to the admin home
@@ -48,6 +49,9 @@ export default function RouteManager() {
                     </p>
                 </div>
             </div>
+
+            {/* The notice on every page and the map, and "bus service is suspended" */}
+            <ServiceNoticeCard />
 
             {/* Search */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">

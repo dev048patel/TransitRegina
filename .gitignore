@@ -47,3 +47,7 @@ route-overrides.json
 
 # OpenStreetMap download for the walking graph (scripts/build-walk-graph.mjs); the built graph is committed
 /data/osm
+
+
+# SEO audit output (claude-seo plugin)
+/transitregina.ca-audit/

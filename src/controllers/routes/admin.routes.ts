@@ -13,6 +13,7 @@ import { HealthService } from '../../models/services/HealthService';
 import { RealTimeService } from '../../models/services/RealTimeService';
 import { SmsOutageService } from '../../models/services/SmsOutageService';
 import { ServiceNoticeService, CITY_UPDATES_URL, MAX_MESSAGE } from '../../models/services/ServiceNoticeService';
+import { LiveFleetService } from '../../models/services/LiveFleetService';
 import { reginaDateKey, startOfReginaDay } from '../../models/services/ReginaTime';
 import { SmsAccessService, SMS_FEATURE } from '../../models/services/SmsAccessService';
 import { CLIENT_EVENTS, SERVER_EVENTS, presentWithin, summarizeEvents, type VisitorEvent } from '../../models/services/UsageEvents';
@@ -708,6 +709,11 @@ router.patch('/sms/settings', requireAdmin, async (req: Request, res: Response) 
     ].filter(Boolean);
     if (changes.length) await audit(req, 'sms_settings_changed', `Admin ${changes.join('; ')}.${reasonOf(req)}`, next.dry_run ? 'info' : 'warning');
     res.json({ ok: true, settings: { dryRun: next.dry_run, allowlist: next.allowlist } });
+});
+
+// ── Live buses today: routes with no bus in the feed for 5 min, buses missing or stopped mid-route ──
+router.get('/service/live', (_req: Request, res: Response) => {
+    res.json(LiveFleetService.snapshot());
 });
 
 // ── Service notice: the message on every page and the map, and "standard bus service is suspended" ──

@@ -1859,3 +1859,13 @@ test('marking service suspended tells each rider with a commute once: an email, 
         assert.equal(emails.length, 2);
     } finally { svc._setMailer(null); svc._setTexter(null); svc.clearCache(); }
 });
+
+test('today\'s live buses are for the admin panel only (admins and view-only admins)', async () => {
+    assert.equal((await api('GET', '/api/admin/service/live')).status, 401);
+    assert.equal((await api('GET', '/api/admin/service/live', { token: T.user })).status, 403);
+    for (const token of [T.admin, T.viewer]) {
+        const r = await api('GET', '/api/admin/service/live', { token });
+        assert.equal(r.status, 200);
+        assert.equal(r.json.routes.length, 22);
+    }
+});

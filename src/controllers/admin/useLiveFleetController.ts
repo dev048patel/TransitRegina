@@ -1,7 +1,7 @@
 /**
  * useLiveFleetController.ts — Transit Regina  [MVC Controller]
  * Which routes and buses are running today, for the admin Service page, refreshed every 30 s:
- * routes with no bus in the live feed for 5 minutes, and buses missing from it or stopped mid-route.
+ * routes with no bus in the live feed for 10 minutes, and buses missing from it or stopped mid-route.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiGet } from '../../models/lib/apiClient';
@@ -9,7 +9,7 @@ import { apiGet } from '../../models/lib/apiClient';
 export type BusStatus = 'moving' | 'layover' | 'stopped' | 'missing';
 export interface FleetBus { busId: number; route: string; line: string; status: BusStatus; inactive: boolean; lastSeenAt: string; since: string | null; lat: number; lng: number }
 export interface FleetRoute { route: string; status: 'live' | 'inactive' | 'checking'; buses: number; stopped: number; lastSeenAt: string | null; inactiveSince: string | null }
-export interface FleetSnapshot { day: string; trackingSince: string | null; feedOk: boolean; lastFeedAt: string | null; routes: FleetRoute[]; buses: FleetBus[] }
+export interface FleetSnapshot { day: string; inactiveAfterMin: number; trackingSince: string | null; feedOk: boolean; lastFeedAt: string | null; routes: FleetRoute[]; buses: FleetBus[] }
 
 const EVERY_MS = 30_000;
 

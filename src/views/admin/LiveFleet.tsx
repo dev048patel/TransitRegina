@@ -1,7 +1,7 @@
 /**
  * LiveFleet.tsx — Transit Regina  [VIEW — MVC]
  * On the admin Service page: today's buses from the live feed. The card sums it up and lists the
- * inactive buses (missing from the feed, or stopped mid-route, for 5+ minutes); LiveRouteBadge is the
+ * inactive buses (missing from the feed, or stopped mid-route, for 10+ minutes); LiveRouteBadge is the
  * "Live today" column of the routes table.
  */
 import { Bus } from 'lucide-react';
@@ -9,7 +9,7 @@ import type { FleetBus, FleetRoute, FleetSnapshot } from '../../controllers/admi
 import { Badge, Card } from '../components/admin/ui';
 
 const time = (iso: string | null) => iso ? new Date(iso).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' }) : '';
-const mins = (iso: string | null) => iso ? Math.max(5, Math.round((Date.now() - Date.parse(iso)) / 60_000)) : 0;
+const mins = (iso: string | null) => iso ? Math.round((Date.now() - Date.parse(iso)) / 60_000) : 0;
 
 export function LiveRouteBadge({ route }: { route?: FleetRoute }) {
     if (!route || route.status === 'checking') return <span className="text-xs text-gray-400">Checking…</span>;
@@ -42,7 +42,7 @@ export default function LiveFleetCard({ fleet, error, counts, inactiveBuses }: {
 }) {
     if (!fleet && !error) return null;
     return (
-        <Card title="Buses today" about="From the live feed, checked every 15 seconds. A route is inactive after 5 minutes with no bus on it; a bus is inactive after 5 minutes missing from the feed or standing still away from its route's ends."
+        <Card title="Buses today" about={`From the live feed, checked every 15 seconds. A route is inactive after ${fleet?.inactiveAfterMin ?? 10} minutes with no bus on it; a bus is inactive after ${fleet?.inactiveAfterMin ?? 10} minutes missing from the feed or standing still away from its route's ends.`}
             action={fleet && <Badge tone={fleet.feedOk ? 'good' : 'bad'}>{fleet.feedOk ? 'Feed answering' : 'Feed not answering'}</Badge>}>
             <div className="px-5 py-4 space-y-3 text-sm">
                 {error && <p role="alert" className="text-red-700">Could not load the live buses: {error}</p>}

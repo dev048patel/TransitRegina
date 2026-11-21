@@ -711,7 +711,7 @@ router.patch('/sms/settings', requireAdmin, async (req: Request, res: Response) 
     res.json({ ok: true, settings: { dryRun: next.dry_run, allowlist: next.allowlist } });
 });
 
-// ── Live buses today: routes with no bus in the feed for 5 min, buses missing or stopped mid-route ──
+// ── Live buses today: routes with no bus in the feed for 10 min, buses missing or stopped mid-route ──
 router.get('/service/live', (_req: Request, res: Response) => {
     res.json(LiveFleetService.snapshot());
 });

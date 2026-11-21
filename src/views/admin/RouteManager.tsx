@@ -57,7 +57,7 @@ export default function RouteManager() {
             {/* The notice on every page and the map, and "bus service is suspended" */}
             <ServiceNoticeCard />
 
-            {/* Buses today: routes with no bus for 5 min, buses missing or stopped mid-route */}
+            {/* Buses today: routes with no bus for 10 min, buses missing or stopped mid-route */}
             <LiveFleetCard fleet={live.fleet} error={live.error} counts={live.counts} inactiveBuses={live.inactiveBuses} />
 
             {/* Search */}

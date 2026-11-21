@@ -6,8 +6,8 @@
  *   per bus    where it was last seen, when it last moved, and its route
  *   per route  when a bus was last seen on it
  *
- * A route is inactive when no bus on it has been in the feed for 5 minutes. A bus is inactive when it
- * has been missing from the feed for 5 minutes, or has not moved for 5 minutes away from its route's
+ * A route is inactive when no bus on it has been in the feed for 10 minutes. A bus is inactive when it
+ * has been missing from the feed for 10 minutes, or has not moved for 10 minutes away from its route's
  * ends (standing at a route's first or last stop is a layover, not a problem).
  *
  * Kept in memory only: it starts again at midnight (Regina) and after a redeploy. While the feed is
@@ -20,7 +20,7 @@ import { RealTimeService } from './RealTimeService';
 import { reginaDateKey } from './ReginaTime';
 import type { BusPosition } from '../transit/BusPosition';
 
-export const INACTIVE_AFTER_MS = 5 * 60_000;
+export const INACTIVE_AFTER_MS = 10 * 60_000;
 const MOVED_METRES = 50;          // GPS wander at a standstill stays well inside this
 const ROUTE_END_METRES = 200;     // this close to a route's first or last stop is a layover
 const FEED_STALE_MS = 60_000;     // no good answer for this long: the feed is down
@@ -64,11 +64,11 @@ export interface FleetBus {
 export type RouteStatus = 'live' | 'inactive' | 'checking';
 export interface FleetRoute {
     route: string;
-    /** live: a bus on it in the last 5 min. inactive: none for 5 min or more. checking: tracking began under 5 min ago. */
+    /** live: a bus on it in the last 10 min. inactive: none for 10 min or more. checking: tracking began under 10 min ago. */
     status: RouteStatus;
-    /** Buses on it in the feed now (or in the last 5 min) */
+    /** Buses on it in the feed now (or in the last 10 min) */
     buses: number;
-    /** Of those, stopped mid-route for 5+ min */
+    /** Of those, stopped mid-route for 10+ min */
     stopped: number;
     lastSeenAt: string | null;
     /** inactive: since when no bus has been seen (the start of tracking if none was seen today) */
@@ -76,6 +76,8 @@ export interface FleetRoute {
 }
 export interface FleetSnapshot {
     day: string;
+    /** How long without a bus (or without moving) before something counts as inactive */
+    inactiveAfterMin: number;
     trackingSince: string | null;
     feedOk: boolean;
     lastFeedAt: string | null;
@@ -127,7 +129,7 @@ export const LiveFleetService = {
     },
 
     snapshot(now = Date.now()): FleetSnapshot {
-        if (!day) return { day: reginaDateKey(now), trackingSince: null, feedOk: false, lastFeedAt: null, routes: ROUTE_NUMS.map(route => ({ route, status: 'checking', buses: 0, stopped: 0, lastSeenAt: null, inactiveSince: null })), buses: [] };
+        if (!day) return { day: reginaDateKey(now), inactiveAfterMin: INACTIVE_AFTER_MS / 60_000, trackingSince: null, feedOk: false, lastFeedAt: null, routes: ROUTE_NUMS.map(route => ({ route, status: 'checking', buses: 0, stopped: 0, lastSeenAt: null, inactiveSince: null })), buses: [] };
         // While the feed is down the clock stops at its last good answer, so nothing goes missing for that
         const ref = Math.min(now, lastFeedOk);
         const list: FleetBus[] = [...buses.values()].map(b => {
@@ -149,7 +151,7 @@ export const LiveFleetService = {
                 inactiveSince: status === 'inactive' ? iso(last ?? trackingSince) : null,
             };
         });
-        return { day, trackingSince: iso(trackingSince), feedOk: now - lastFeedOk < FEED_STALE_MS, lastFeedAt: lastFeedOk ? iso(lastFeedOk) : null, routes, buses: list };
+        return { day, inactiveAfterMin: INACTIVE_AFTER_MS / 60_000, trackingSince: iso(trackingSince), feedOk: now - lastFeedOk < FEED_STALE_MS, lastFeedAt: lastFeedOk ? iso(lastFeedOk) : null, routes, buses: list };
     },
 
     /** Tests: forget everything */

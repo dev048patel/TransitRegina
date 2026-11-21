@@ -16,6 +16,7 @@ import { checkUsage, sendWeeklyDigest } from './models/services/UsageAlerts';
 import { SecurityEventService } from './models/services/SecurityEventService';
 import { SmsOutageService } from './models/services/SmsOutageService';
 import { ServiceNoticeService } from './models/services/ServiceNoticeService';
+import { LiveFleetService } from './models/services/LiveFleetService';
 import { smsRevokedIds } from './models/services/SmsAccessService';
 import { isPushEndpoint } from './controllers/middleware/security';
 
@@ -154,6 +155,9 @@ schedule('* * * * *', async () => {
 });
 
 // ── Watching the site: health checks and data retention ──────────────────────
+// Every 15 seconds: which routes and buses are running today, for the admin Service page (kept in memory)
+schedule('*/15 * * * * *', () => LiveFleetService.poll());
+if (RUN_JOBS) void LiveFleetService.poll();
 // Every 5 minutes: is the database reachable, is the bus feed answering? Admins are emailed
 // when one stops for two checks in a row, and the Security page shows the current state.
 schedule('*/5 * * * *', () => { HealthService.run().catch(err => console.error('[Health] Check failed:', err)); });

@@ -14,6 +14,8 @@ import { Route } from '../../models/admin/AdminTypes';
 import { useAuth } from '../../models/context/AuthContext';
 import { Navigate } from 'react-router-dom';
 import ServiceNoticeCard from './ServiceNoticeCard';
+import LiveFleetCard, { LiveRouteBadge } from './LiveFleet';
+import { useLiveFleetController } from '../../controllers/admin/useLiveFleetController';
 
 export default function RouteManager() {
     // Only for changing settings: view-only admins go back to the admin home
@@ -26,6 +28,8 @@ export default function RouteManager() {
         openRename, confirmRename, closeRename,
         toggleStatus,
     } = useRouteManagerController();
+    // Today's buses from the live feed: inactive routes and buses, refreshed every 30 s
+    const live = useLiveFleetController();
 
     if (loading) {
         return (
@@ -53,6 +57,9 @@ export default function RouteManager() {
             {/* The notice on every page and the map, and "bus service is suspended" */}
             <ServiceNoticeCard />
 
+            {/* Buses today: routes with no bus for 5 min, buses missing or stopped mid-route */}
+            <LiveFleetCard fleet={live.fleet} error={live.error} counts={live.counts} inactiveBuses={live.inactiveBuses} />
+
             {/* Search */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
                 <div className="relative max-w-xs">
@@ -76,6 +83,7 @@ export default function RouteManager() {
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Route Id</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Route Name</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Live today</th>
                                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
@@ -85,6 +93,7 @@ export default function RouteManager() {
                                     <td className="px-6 py-3 font-bold text-gray-900 text-sm">{route.route_num}</td>
                                     <td className="px-6 py-3 text-sm text-gray-800">{route.route_name}</td>
                                     <td className="px-6 py-3"><StatusBadge status={route.status} /></td>
+                                    <td className="px-6 py-3"><LiveRouteBadge route={live.byRoute.get(String(route.route_num))} /></td>
                                     <td className="px-6 py-3">
                                         <div className="flex items-center gap-2">
                                             <button
@@ -110,7 +119,7 @@ export default function RouteManager() {
                             ))}
                             {routes.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-12 text-center text-gray-400 text-sm">
+                                    <td colSpan={5} className="px-6 py-12 text-center text-gray-400 text-sm">
                                         No routes match your search.
                                     </td>
                                 </tr>

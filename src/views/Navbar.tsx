@@ -102,6 +102,7 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                         <input
                             type="text"
                             placeholder="Search places"
+                            aria-label="Search for a place or address"
                             value={value}
                             onChange={handleInput}
                             onFocus={handleFocus}
@@ -201,6 +202,7 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                         <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
                             <select
                                 className="navbar-route-select"
+                                aria-label="Show one route on the map"
                                 value={selectedRoute || ''}
                                 onChange={(e) => onRouteSelect(e.target.value || null)}
                                 style={{
@@ -343,7 +345,7 @@ export default function Navbar({ onPlaceSelect, onClearPlace, routes, selectedRo
                     </div>}
 
                     {/* Profile Icon */}
-                    <Link to="/profile" style={{ textDecoration: 'none', flexShrink: 0 }}>
+                    <Link to="/profile" aria-label="Profile" title="Profile" style={{ textDecoration: 'none', flexShrink: 0 }}>
                         <div style={{
                             width: '34px', height: '34px', borderRadius: '50%',
                             backgroundColor: 'var(--t-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center',

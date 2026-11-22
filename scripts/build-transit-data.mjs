@@ -12,6 +12,10 @@
    gtfsStopRoutes.json         stop → route → the directions whose trips call there
    gtfsStopSequences.json      route → direction → stop order of that direction's longest trip
    gtfsDirectionalShapes.json  route → direction → the path that trip follows
+   gtfsSchedule.json           the timetable's dates and holidays, each stop's first and last bus, transfers
+
+ And to public/timetables/<route>.json: every scheduled departure, by direction, day type and stop.
+ The stop and route pages load them (src/models/services/TimetableService.ts); the build pre-renders them.
 
  Stops and routes already in the app keep their OBJECTID, ROUTE_ID and file order, so a rerun
  only shows what the city actually changed.
@@ -26,7 +30,8 @@ const outDir = path.join(root, 'src/models/data');
 
 // The generated files, so the run can tell whether the data actually changed (see transitDataDate.ts below).
 // Line endings don't count: on Windows, git checks them out with CRLF and this script writes LF.
-const generatedFiles = ['transitStops.ts', 'transitRoutes.ts', 'transitShapes.json', 'gtfsStopRoutes.json', 'gtfsStopSequences.json', 'gtfsDirectionalShapes.json'];
+// gtfsSchedule.json has a version that changes with any timetable in public/timetables/, so it stands for them.
+const generatedFiles = ['transitStops.ts', 'transitRoutes.ts', 'transitShapes.json', 'gtfsStopRoutes.json', 'gtfsStopSequences.json', 'gtfsDirectionalShapes.json', 'gtfsSchedule.json'];
 const readGenerated = () => generatedFiles.map(f => { try { return fs.readFileSync(path.join(outDir, f), 'utf8').replace(/\r\n/g, '\n'); } catch { return ''; } });
 const generatedBefore = readGenerated();
 
@@ -36,6 +41,9 @@ if (!fs.existsSync(path.join(feedDir, 'stops.txt'))) {
 }
 
 // ── GTFS reading ───────────────────────────────────────────────────────────
+
+/** "25:10:00" → 1510: minutes after midnight of the service day */
+const toMinutes = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 
 function splitCsvLine(line) {
     const cells = [];
@@ -77,9 +85,12 @@ for (const [id, points] of shapePoints) {
 }
 
 const tripStops = new Map(); // trip_id → stop IDs in calling order
+const tripTimes = new Map(); // trip_id → [sequence, stop ID, departure minutes, pickup type][] (for the timetables)
 for (const st of readFeedFile('stop_times.txt')) {
     if (!tripStops.has(st.trip_id)) tripStops.set(st.trip_id, []);
     tripStops.get(st.trip_id).push([Number(st.stop_sequence), st.stop_id]);
+    const time = st.departure_time || st.arrival_time;
+    if (time) (tripTimes.get(st.trip_id) ?? tripTimes.set(st.trip_id, []).get(st.trip_id)).push([Number(st.stop_sequence), st.stop_id, toMinutes(time), st.pickup_type]);
 }
 for (const [id, calls] of tripStops) tripStops.set(id, calls.sort((a, b) => a[0] - b[0]).map(([, stopId]) => stopId));
 
@@ -279,6 +290,95 @@ for (const key of directionKeys) {
 fs.writeFileSync(path.join(outDir, 'gtfsStopSequences.json'), JSON.stringify(sequences));
 fs.writeFileSync(path.join(outDir, 'gtfsDirectionalShapes.json'), JSON.stringify(directionalShapes));
 
+// ── Timetables: public/timetables/<route>.json and gtfsSchedule.json ───────
+
+// Every scheduled departure, for the "Timetable" sections of the stop and route pages. Each route's
+// file is only loaded on those pages, so the rest of the app never downloads ~140,000 times.
+// Times are minutes after midnight of the service day; past midnight they go above 1,440, as in GTFS.
+const feedCalendar = readFeedFile('calendar.txt');
+const feedCalendarDates = fs.existsSync(path.join(feedDir, 'calendar_dates.txt')) ? readFeedFile('calendar_dates.txt') : [];
+const DAY_TYPES = ['weekday', 'saturday', 'sunday'];
+const dayTypeOfService = new Map(feedCalendar.map(c => [c.service_id,
+    c.saturday === '1' ? 'saturday' : c.sunday === '1' ? 'sunday' : ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'].some(d => c[d] === '1') ? 'weekday' : null]));
+const isoDay = d => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+
+const tripById = new Map(feedTrips.map(t => [t.trip_id, t]));
+// route → direction → day type → stop → departure minutes
+const departures = new Map();
+const firstLast = new Map(); // stop → day type → [first, last]
+for (const [tripId, calls] of tripTimes) {
+    const trip = tripById.get(tripId);
+    const routeNum = trip && routeNumById.get(trip.route_id);
+    const dayType = trip && dayTypeOfService.get(trip.service_id);
+    if (!routeNum || !dayType) continue;
+    calls.sort((a, b) => a[0] - b[0]);
+    // The last call is where the bus ends its trip: nobody can board it there
+    for (const [, stopId, minutes, pickup] of calls.slice(0, -1)) {
+        if (pickup === '1') continue;   // "no pickup"
+        const byDir = departures.get(routeNum) ?? departures.set(routeNum, new Map()).get(routeNum);
+        const byDay = byDir.get(trip.direction_id) ?? byDir.set(trip.direction_id, new Map()).get(trip.direction_id);
+        const byStop = byDay.get(dayType) ?? byDay.set(dayType, new Map()).get(dayType);
+        (byStop.get(stopId) ?? byStop.set(stopId, []).get(stopId)).push(minutes);
+        const hours = firstLast.get(stopId) ?? firstLast.set(stopId, {}).get(stopId);
+        const [first, last] = hours[dayType] ?? [Infinity, -Infinity];
+        hours[dayType] = [Math.min(first, minutes), Math.max(last, minutes)];
+    }
+}
+
+const timetableDir = path.join(root, 'public', 'timetables');
+fs.rmSync(timetableDir, { recursive: true, force: true });
+fs.mkdirSync(timetableDir, { recursive: true });
+const timetableText = [];
+for (const routeNum of [...departures.keys()].sort(byRouteNum)) {
+    const directions = {};
+    for (const [dir, byDay] of [...departures.get(routeNum)].sort()) {
+        directions[dir] = {};
+        for (const dayType of DAY_TYPES) {
+            const byStop = byDay.get(dayType);
+            if (!byStop) continue;
+            directions[dir][dayType] = Object.fromEntries([...byStop].sort().map(([stopId, mins]) => [stopId, [...new Set(mins)].sort((a, b) => a - b)]));
+        }
+    }
+    const text = JSON.stringify({ route: routeNum, directions });
+    timetableText.push(text);
+    fs.writeFileSync(path.join(timetableDir, `${routeNum}.json`), text);
+}
+
+// Holidays and other days that don't run their usual service (calendar_dates.txt)
+const datesByDay = new Map();
+for (const d of feedCalendarDates) {
+    const dayType = dayTypeOfService.get(d.service_id);
+    if (!dayType) continue;
+    const entry = datesByDay.get(d.date) ?? datesByDay.set(d.date, { added: new Set(), removed: new Set() }).get(d.date);
+    (d.exception_type === '1' ? entry.added : entry.removed).add(dayType);
+}
+const usualDayType = date => { const day = new Date(`${isoDay(date)}T12:00:00Z`).getUTCDay(); return day === 0 ? 'sunday' : day === 6 ? 'saturday' : 'weekday'; };
+const exceptions = [...datesByDay].sort().map(([date, { added, removed }]) => {
+    const runs = new Set([usualDayType(date)]);
+    removed.forEach(t => runs.delete(t));
+    added.forEach(t => runs.add(t));
+    return { date: isoDay(date), service: [...runs][0] ?? null };
+}).filter(e => e.service !== usualDayType(e.date.replace(/-/g, '')));
+
+const transfersOut = {};
+if (fs.existsSync(path.join(feedDir, 'transfers.txt'))) {
+    for (const t of readFeedFile('transfers.txt')) {
+        if (t.from_stop_id === t.to_stop_id || t.transfer_type === '3') continue;   // same stop, or "not possible"
+        (transfersOut[t.from_stop_id] ??= []).includes(t.to_stop_id) || transfersOut[t.from_stop_id].push(t.to_stop_id);
+    }
+}
+
+const schedule = {
+    // Changes whenever any timetable does, so the app can ask for fresh files after an update
+    version: String(timetableText.join('\n').split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)),
+    start: isoDay(feedCalendar.map(c => c.start_date).sort()[0]),
+    end: isoDay(feedCalendar.map(c => c.end_date).sort().at(-1)),
+    exceptions,
+    hours: Object.fromEntries([...firstLast].sort()),
+    transfers: transfersOut,
+};
+fs.writeFileSync(path.join(outDir, 'gtfsSchedule.json'), JSON.stringify(schedule));
+
 // ── transitDataDate.ts ─────────────────────────────────────────────────────
 
 // The sitemap's lastmod for the route and stop pages. Only moves when the data really changed, so
@@ -307,6 +407,7 @@ addedStops.forEach(s => console.log(`  + ${s.stop_id} ${s.stop_name}`));
 removedStops.forEach(s => console.log(`  - ${s.stopId}`));
 console.log(`Routes: ${routes.length} (${routes.filter(r => !oldRouteNums.has(r.ROUTE_NUM)).length} added, ${oldRoutes.filter(r => !feedRouteByNum.has(r.routeNum)).length} removed)`);
 console.log(`Stops served: ${Object.keys(stopRoutesOut).length}. Route directions: ${directionKeys.length}.`);
+console.log(`Timetables: ${timetableText.length} routes, in effect ${schedule.start} to ${schedule.end}; ${exceptions.length} days with other service (${exceptions.map(e => `${e.date} ${e.service ?? 'none'}`).join(', ')}).`);
 for (const key of directionKeys) {
     const [routeNum, dir] = key.split('-');
     const seq = sequences[routeNum][dir];

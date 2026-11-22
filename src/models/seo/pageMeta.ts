@@ -9,6 +9,7 @@
 */
 import { SITE } from '../data/legal';
 import { FOUNDERS } from '../data/siteFacts';
+import { formatTime } from '../lib/clockTime';
 import type { RouteInfo, StopInfo } from '../services/TransitDirectory';
 
 export const SITE_URL = 'https://transitregina.ca';
@@ -125,8 +126,9 @@ export function routeMeta(r: RouteInfo): PageMeta {
             `Route ${r.num} ${short} | Transit Regina`,
         ]),
         description: fitDescription([
-            `Where is the route ${r.num} bus right now? See route ${r.num}${ends} live, all ${r.stopCount} stops in order both ways, and where to change to other Regina buses.`,
-            `Where is the route ${r.num} bus right now? See it live, all ${r.stopCount} stops in order both ways, and where to change to other Regina buses.`,
+            `Route ${r.num}${ends}: when it runs and how often, the timetable, all ${r.stopCount} stops in order both ways, and the buses live on the map.`,
+            `Regina bus route ${r.num}: when it runs and how often, the timetable, all ${r.stopCount} stops in order both ways, and the buses live on the map.`,
+            `Regina bus route ${r.num}: timetable, all ${r.stopCount} stops in order and the buses live on the map.`,
         ]),
         jsonLd: [
             crumbs([['Home', '/'], ['Bus routes', '/routes'], [`Route ${r.num} ${r.name}`, path]]),
@@ -150,6 +152,7 @@ export function stopMeta(s: StopInfo): PageMeta {
     const dirShort = s.direction ? ` (${DIRECTION_SHORT[s.direction] ?? s.direction})` : '';
     const dirWords = s.direction ? `, ${s.direction.toLowerCase()}` : '';
     const towards = s.routes.length === 1 ? ` towards ${s.routes[0].towards}` : '';
+    const weekday = s.hours.weekday ? ` Weekdays ${formatTime(s.hours.weekday[0])} to ${formatTime(s.hours.weekday[1])}.` : '';
     return {
         path,
         title: fit([
@@ -159,12 +162,12 @@ export function stopMeta(s: StopInfo): PageMeta {
             `Stop ${s.id}: ${s.name}${dirShort}, Regina`,
             `Stop ${s.id}: ${s.name}${dirShort}`,
         ]),
-        // What the page has: the routes and where they go, the stops either side and nearby, and a link
-        // to live arrivals (the arrivals themselves are on the map, not on this page)
+        // What the page has: the routes, the hours, the full timetable and a link to live arrivals
         description: fitDescription([
-            `Regina bus stop ${s.id}, ${s.name}${dirWords}${served ? `: ${served}${towards}` : ''}. The stops either side, stops nearby and a link to live arrivals.`,
-            `Regina bus stop ${s.id}, ${s.name}${served ? `: ${served}` : ''}. The stops either side, stops nearby and a link to live arrivals.`,
-            `Regina bus stop ${s.id}, ${s.name}${served ? `: ${served}` : ''}.`,
+            `Regina bus stop ${s.id}, ${s.name}${dirWords}${served ? `: ${served}${towards}` : ''}.${weekday} Full timetable and live arrivals.`,
+            `Regina bus stop ${s.id}, ${s.name}${dirWords}${served ? `: ${served}` : ''}.${weekday} Full timetable and live arrivals.`,
+            `Regina bus stop ${s.id}, ${s.name}${served ? `: ${served}` : ''}.${weekday} Timetable and live arrivals.`,
+            `Regina bus stop ${s.id}, ${s.name}${served ? `: ${served}` : ''}.${weekday}`,
         ]),
         jsonLd: [
             crumbs(stopCrumbs(s).map(([name, p]) => [name, p ?? path] as [string, string])),

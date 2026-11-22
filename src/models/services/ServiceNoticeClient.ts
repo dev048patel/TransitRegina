@@ -5,6 +5,7 @@
  * A failed request means "no notice": a notice must never break a page.
  */
 import { apiGet } from '../lib/apiClient';
+import { SITE } from '../data/legal';
 
 export interface PublicServiceNotice {
     active: boolean;
@@ -14,7 +15,7 @@ export interface PublicServiceNotice {
     updatedAt?: string | null;
 }
 
-export const CITY_UPDATES_URL = 'https://www.regina.ca/transportation-roads-parking/transit/service-updates/';
+export const CITY_UPDATES_URL = SITE.serviceUpdatesUrl;
 const FRESH_MS = 30_000;
 const NONE: PublicServiceNotice = { active: false };
 

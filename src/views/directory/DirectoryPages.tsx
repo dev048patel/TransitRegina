@@ -7,7 +7,10 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowRight, Bus, ChevronRight, MapPin, Navigation } from 'lucide-react';
-import { ROUTES, routeBySlug, stopBySlug, stopName, stopSlug, project, svgPathNear, type RouteInfo, type StopInfo } from '../../models/services/TransitDirectory';
+import { ROUTES, routeBySlug, stopBySlug, stopName, stopRef, stopSlug, project, svgPathNear, type RouteInfo, type StopInfo } from '../../models/services/TransitDirectory';
+import { DAY_LABEL, departuresAt, formatTime, stopHours, transfersAt } from '../../models/services/TimetableService';
+import { useTimetableController } from '../../controllers/useTimetableController';
+import { RouteTimetable, ScheduleNote, StopTimetable } from './Timetables';
 import { HOME_META, routeMeta, routesIndexMeta, stopCrumbs, stopMeta } from '../../models/seo/pageMeta';
 import { usePageMeta } from '../../controllers/usePageMeta';
 import { SITE } from '../../models/data/legal';
@@ -137,6 +140,7 @@ export function RoutesIndexPage() {
                 ['Which buses go downtown?', <>Routes with downtown in their name: {named('downtown').map((r, i) => <React.Fragment key={r.num}>{i ? ', ' : ''}<Link to={`/routes/${r.slug}`}>route {r.num} {r.name}</Link></React.Fragment>)}. Most other routes also pass through downtown; each route page lists its stops.</>],
                 ['Is this the official Regina Transit timetable?', <>No. {SITE.brand} is an independent project built on the City of Regina's open data. For official schedules and service notices, see <a href={SITE.officialUrl}>regina.ca</a>.</>],
             ]} />
+            <ScheduleNote now={null} />
         </Shell>
     );
 }
@@ -146,7 +150,11 @@ export function RoutePage() {
     const { slug = '' } = useParams();
     const route = routeBySlug(slug);
     usePageMeta(route ? routeMeta(route) : { ...HOME_META, path: `/routes/${slug}`, noindex: true });
+    const timetable = useTimetableController(route ? [route.num] : []);
     if (!route) return <NotFoundPage />;
+    // Weekday first and last bus from the first stop of the first direction, for the questions below
+    const firstDir = route.directions[0];
+    const weekday = firstDir ? departuresAt(timetable.tables[route.num], firstDir.id, 'weekday', firstDir.from.STOP_ID) : [];
     const connections = route.connections.map(n => ROUTES.find(r => r.num === n)).filter((r): r is RouteInfo => !!r);
     const loop = route.directions.length === 1 || route.directions.every(d => d.from.STOP_ID === d.to.STOP_ID);
     return (
@@ -164,6 +172,8 @@ export function RoutePage() {
             </div>
 
             <div className="mt-8"><NetworkMap highlight={[route]} label={`Map of Regina bus route ${route.num} ${route.name}`} /></div>
+
+            <RouteTimetable route={route} state={timetable} />
 
             <h2 className="mt-10 mb-3 text-xl font-black">Stops, in order</h2>
             <div className={`grid gap-4 ${route.directions.length > 1 ? 'md:grid-cols-2' : ''}`}>
@@ -198,6 +208,7 @@ export function RoutePage() {
             )}
 
             <Faq items={[
+                ...(weekday.length ? [[`When does route ${route.num} run on weekdays?`, <>From {stopName(firstDir.from)}, the first bus leaves at {formatTime(weekday[0])} and the last at {formatTime(weekday[weekday.length - 1])}, {weekday.length} buses in all. The timetable above has weekends and every time.</>] as [string, React.ReactNode]] : []),
                 [`Where is the route ${route.num} bus right now?`, <>Open the <a href={`/map?route=${route.num}`}>live map for route {route.num}</a>. It shows every route {route.num} bus as it moves, with positions updated every few seconds.</>],
                 [`How many stops does route ${route.num} have?`, <>{route.stopCount} stops. {loop ? `It runs as a loop from ${stopName(route.directions[0].from)}.` : `It runs between ${stopName(route.directions[0].from)} and ${stopName(route.directions[0].to)}, and back.`}</>],
                 [`Which buses connect with route ${route.num}?`, connections.length ? <>Route {route.num} shares stops with routes {connections.map(r => r.num).join(', ')}.</> : <>None share its stops.</>],
@@ -212,8 +223,12 @@ export function StopPage() {
     const { slug = '' } = useParams();
     const info: StopInfo | null = stopBySlug(slug);
     usePageMeta(info ? stopMeta(info) : { ...HOME_META, path: `/stops/${slug}`, noindex: true });
+    const routeNums = info ? info.routes.map(r => r.route.num).filter((n, i, a) => a.indexOf(n) === i) : [];
+    const timetable = useTimetableController(routeNums);
     if (!info) return <NotFoundPage />;
     const routes = info.routes.map(r => r.route).filter((r, i, a) => a.findIndex(x => x.num === r.num) === i);
+    const hours = stopHours(info.id);
+    const transfers = transfersAt(info.id).map(stopRef).filter((t): t is NonNullable<typeof t> => !!t);
     return (
         <Shell crumbs={stopCrumbs(info)}>
             <p className="font-mono text-sm font-bold text-[#2E7D32]">Stop #{info.id}</p>
@@ -249,6 +264,16 @@ export function StopPage() {
                 <section>
                     <h2 className="mb-3 text-xl font-black">Where it is</h2>
                     <StopMap info={info} routes={routes} />
+                    {info.opposite && (
+                        <p className="mt-3 text-sm text-slate-600">
+                            Going the other way? <Link to={`/stops/${info.opposite.slug}`}>Stop {info.opposite.stop.STOP_ID}</Link>{info.opposite.direction ? ` (${info.opposite.direction.toLowerCase()})` : ''} is across the street.
+                        </p>
+                    )}
+                    {transfers.length > 0 && (
+                        <p className="mt-3 text-sm text-slate-600">
+                            Transfer point: buses here are timed to meet buses at {transfers.map((t, i) => <React.Fragment key={t.id}>{i ? ', ' : ''}<Link to={`/stops/${t.slug}`}>stop {t.id} ({t.name})</Link></React.Fragment>)}.
+                        </p>
+                    )}
                     {info.nearby.length > 0 && (
                         <>
                             <h3 className="mt-5 mb-2 font-black">Stops nearby</h3>
@@ -266,8 +291,11 @@ export function StopPage() {
                 </section>
             </div>
 
+            <StopTimetable info={info} state={timetable} />
+
             <Faq items={[
-                [`When is the next bus at stop ${info.id}?`, <>Open the <a href={`/map?stop=${info.id}`}>live arrivals for stop {info.id}</a> to see every departure left today, updated as buses move.</>],
+                [`When is the next bus at stop ${info.id}?`, <>The timetable above has every scheduled time. To see where the buses are now, open the <a href={`/map?stop=${info.id}`}>live arrivals for stop {info.id}</a>, updated as buses move.</>],
+                ...(hours.weekday ? [[`When are the first and last buses at stop ${info.id}?`, <>On weekdays ({DAY_LABEL.weekday}) the first bus is at {formatTime(hours.weekday[0])} and the last at {formatTime(hours.weekday[1])}.{hours.saturday ? ` Saturday: ${formatTime(hours.saturday[0])} to ${formatTime(hours.saturday[1])}.` : ''}{hours.sunday ? ` Sunday: ${formatTime(hours.sunday[0])} to ${formatTime(hours.sunday[1])}.` : ''}</>] as [string, React.ReactNode]] : []),
                 [`Which buses stop at ${info.name}?`, routes.length ? <>Route{routes.length > 1 ? 's' : ''} {routes.map((r, i) => <React.Fragment key={r.num}>{i ? ', ' : ''}<Link to={`/routes/${r.slug}`}>{r.num} {r.name}</Link></React.Fragment>)}.</> : <>No route currently serves this stop.</>],
                 ['Is this information official?', <>No. It comes from the City of Regina's open data, shown by an independent project. For official notices, see <a href={SITE.officialUrl}>regina.ca</a>.</>],
             ]} />

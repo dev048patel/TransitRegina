@@ -16,6 +16,8 @@ export const SITE = {
     licenceUrl: 'https://www.regina.ca/city-government/open-data/open-government-licence/',
     licenceName: 'Open Government Licence – City of Regina',
     officialUrl: 'https://www.regina.ca/transportation-roads-parking/transit/',
+    /** The City's detours, suspensions and holiday service */
+    serviceUpdatesUrl: 'https://www.regina.ca/transportation-roads-parking/transit/service-updates/',
 };
 
 /* The key points, shown where people agree (signup form and the sign-in step). Canada's Privacy

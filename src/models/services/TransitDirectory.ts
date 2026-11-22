@@ -18,6 +18,7 @@ import stopRouteDirections from '../data/gtfsStopRoutes.json';
 import transitShapes from '../data/transitShapes.json';
 import { Stop } from '../transit/Stop';
 import { STOP_DIRECTION_LABEL, directionOfStop } from '../transit/StopDirection';
+import { stopHours } from './TimetableService';
 
 export interface RouteDirection {
     id: string;
@@ -46,6 +47,8 @@ export interface RouteInfo {
 
 export interface StopRoute {
     route: RouteInfo;
+    /** The direction's id (GTFS direction_id), which keys its timetable */
+    direction: string;
     /** Where buses on this route are heading from here */
     towards: string;
     previous?: Stop;
@@ -63,6 +66,10 @@ export interface StopInfo {
     lng: number;
     routes: StopRoute[];
     nearby: { stop: Stop; slug: string; metres: number }[];
+    /** First and last scheduled bus by day type, in minutes after midnight (TimetableService) */
+    hours: Partial<Record<'weekday' | 'saturday' | 'sunday', [number, number]>>;
+    /** The stop with the same name on the other side of the street, if there is one */
+    opposite: { stop: Stop; slug: string; direction: string | null } | null;
 }
 
 /* ── Names and addresses ── */
@@ -176,7 +183,7 @@ export function stopInfo(id: string): StopInfo | null {
             const dir = route.directions.find(x => x.id === String(d));
             if (!dir) return [];
             const at = dir.stops.findIndex(s => s.STOP_ID === id);
-            return [{ route, towards: stopName(dir.to), previous: at > 0 ? dir.stops[at - 1] : undefined, next: at >= 0 && at < dir.stops.length - 1 ? dir.stops[at + 1] : undefined }];
+            return [{ route, direction: dir.id, towards: stopName(dir.to), previous: at > 0 ? dir.stops[at - 1] : undefined, next: at >= 0 && at < dir.stops.length - 1 ? dir.stops[at + 1] : undefined }];
         });
     }).sort((a, b) => Number(a.route.num) - Number(b.route.num));
     const nearby = SERVED_STOPS
@@ -186,7 +193,22 @@ export function stopInfo(id: string): StopInfo | null {
         .sort((a, b) => a.metres - b.metres)
         .slice(0, 6);
     const direction = directionOfStop(stop);
-    return { stop, id, name: stopName(stop), slug: stopSlug(stop), direction: direction ? STOP_DIRECTION_LABEL[direction] : null, lat, lng, routes, nearby };
+    const name = stopName(stop);
+    // Same name, a different stop within 150 m: the one across the street (or around the corner)
+    const across = SERVED_STOPS
+        .filter(s => s.STOP_ID !== id && stopName(s) === name)
+        .map(s => ({ s, metres: metresBetween(lat, lng, Number(s.LAT), Number(s.LON)) }))
+        .filter(x => x.metres <= 150)
+        .sort((a, b) => a.metres - b.metres)[0];
+    const acrossDirection = across ? directionOfStop(across.s) : null;
+    const opposite = across ? { stop: across.s, slug: stopSlug(across.s), direction: acrossDirection ? STOP_DIRECTION_LABEL[acrossDirection] : null } : null;
+    return { stop, id, name, slug: stopSlug(stop), direction: direction ? STOP_DIRECTION_LABEL[direction] : null, lat, lng, routes, nearby, opposite, hours: stopHours(id) };
+}
+
+/** A stop's name and address, without the rest of stopInfo (for links to other stops) */
+export function stopRef(id: string): { id: string; name: string; slug: string } | null {
+    const stop = stopsById.get(id);
+    return stop ? { id, name: stopName(stop), slug: stopSlug(stop) } : null;
 }
 
 /** Finds a stop by its address; "0742" or "0742-anything" both work */

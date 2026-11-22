@@ -22,6 +22,9 @@ export interface PageMeta {
     description: string;
     /** Keep out of search results (sign-in, profile, error pages) */
     noindex?: boolean;
+    /** Origins the page needs straight away, connected to early: the map's Google Maps script and images
+        (fetched without CORS, so the hint has no crossorigin either) */
+    preconnect?: string[];
     jsonLd?: object[];
 }
 
@@ -110,6 +113,7 @@ export const MAP_META: PageMeta = {
     // The map is the app itself, with no text of its own for search engines to read; the homepage and
     // /routes are the pages to send people to for "Regina bus map"
     noindex: true,
+    preconnect: ['https://maps.googleapis.com', 'https://maps.gstatic.com'],
 };
 
 export function routeMeta(r: RouteInfo): PageMeta {
@@ -257,6 +261,7 @@ export function headTags(m: PageMeta): string {
         `<meta name="description" content="${esc(m.description)}" />`,
         `<link rel="canonical" href="${url}" />`,
         m.noindex ? '<meta name="robots" content="noindex" />' : '',
+        ...(m.preconnect ?? []).map(o => `<link rel="preconnect" href="${esc(o)}" />`),
         `<meta property="og:type" content="website" />`,
         `<meta property="og:site_name" content="${esc(SITE.brand)}" />`,
         `<meta property="og:url" content="${url}" />`,

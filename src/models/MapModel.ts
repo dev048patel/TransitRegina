@@ -77,5 +77,7 @@ export const MapModel = {
     height: '100%',
   } as React.CSSProperties,
 
-  libraries: ['places'] as ("places" | "drawing" | "geometry" | "visualization")[],
+  // None up front: Places (address search) loads the first time someone uses the search box or taps
+  // the map (PlacesService.load), so opening the map downloads less. The admin map shares this list.
+  libraries: [] as ("places" | "drawing" | "geometry" | "visualization")[],
 };

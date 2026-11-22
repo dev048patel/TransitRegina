@@ -5,9 +5,10 @@ import { ArrowLeft } from 'lucide-react';
 import { LEGAL_PAGES, SITE } from '../models/data/legal';
 import IndependenceNotice from './components/IndependenceNotice';
 
-/* Swaps {contact} and {region} for their values, or a highlighted marker if not yet filled in */
+/* Swaps {contact} and {region} for their values, or a highlighted marker if not yet filled in, and
+   turns [words](/path) into a link */
 function Filled({ text }: { text: string }) {
-    const parts = text.split(/(\{contact\}|\{region\})/);
+    const parts = text.split(/(\{contact\}|\{region\}|\[[^\]]+\]\([^)\s]+\))/);
     return (
         <>
             {parts.map((part, i) => {
@@ -17,6 +18,10 @@ function Filled({ text }: { text: string }) {
                 if (part === '{region}') return SITE.DATA_REGION
                     ? <React.Fragment key={i}>{SITE.DATA_REGION}</React.Fragment>
                     : <mark key={i} className="bg-amber-100 text-amber-900 px-1 rounded">[database region to be filled in]</mark>;
+                const link = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
+                if (link) return link[2].startsWith('/')
+                    ? <Link key={i} to={link[2]} className="font-semibold text-[#003DA5]">{link[1]}</Link>
+                    : <a key={i} href={link[2]} className="font-semibold text-[#003DA5]">{link[1]}</a>;
                 return <React.Fragment key={i}>{part}</React.Fragment>;
             })}
         </>

@@ -29,6 +29,7 @@ import LegalPage from '../src/views/LegalPage';
 import { ROUTES, SERVED_STOPS, stopInfo } from '../src/models/services/TransitDirectory';
 import { HOME_META, MAP_META, PRIVATE_PREFIXES, STATIC_META, SITE_URL, headTags, metaForPath, routeMeta, routesIndexMeta, stopMeta, teamMeta, type PageMeta } from '../src/models/seo/pageMeta';
 import { connectSnapshot, homeSnapshot, teamSnapshot } from './snapshots';
+import { primeTimetable, type RouteTimetable } from '../src/models/services/TimetableService';
 import { TEAM } from '../src/models/data/team';
 import { TRANSIT_DATA_DATE } from '../src/models/data/transitDataDate';
 import { SITE } from '../src/models/data/legal';
@@ -45,6 +46,14 @@ const base = template
     .replace(/<meta\s+name="twitter:[^"]*"[^>]*>\s*/g, '')
     .replace(/<script type="application\/ld\+json"[^>]*>[\s\S]*?<\/script>\s*/g, '');
 if (!base.includes('<div id="root"></div>')) throw new Error('prerender: <div id="root"></div> not found in build/index.html');
+
+/* Every route's timetable (public/timetables, copied into build/ by Vite), so the route and stop pages'
+   HTML has the full times; in the browser the pages load these files themselves */
+for (const r of ROUTES) {
+    const file = path.join(out, 'timetables', `${r.num}.json`);
+    if (!fs.existsSync(file)) throw new Error(`prerender: no timetable for route ${r.num} (${file}); run npm run build:transit-data`);
+    primeTimetable(JSON.parse(fs.readFileSync(file, 'utf8')) as RouteTimetable);
+}
 
 const routes = (
     <Routes>

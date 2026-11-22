@@ -1,6 +1,8 @@
 /* Facts and wording for the independence notice and the About, Privacy and Terms pages.
    The Privacy and Terms wording is a plain-language draft, not legal advice; have it reviewed. */
 
+import { FOUNDERS } from './siteFacts';
+
 export const SITE = {
     brand: 'Transit Regina',
     url: 'https://transitregina.ca',
@@ -16,6 +18,8 @@ export const SITE = {
     licenceUrl: 'https://www.regina.ca/city-government/open-data/open-government-licence/',
     licenceName: 'Open Government Licence – City of Regina',
     officialUrl: 'https://www.regina.ca/transportation-roads-parking/transit/',
+    /** The City's detours, suspensions and holiday service */
+    serviceUpdatesUrl: 'https://www.regina.ca/transportation-roads-parking/transit/service-updates/',
 };
 
 /* The key points, shown where people agree (signup form and the sign-in step). Canada's Privacy
@@ -31,7 +35,8 @@ export const AT_A_GLANCE: string[] = [
     'Your rights as a consumer are not affected. If something goes wrong, contact us first; Saskatchewan law applies.',
 ];
 
-/* A page is a list of sections; `{contact}` and `{region}` are swapped for the values above */
+/* A page is a list of sections; `{contact}` and `{region}` are swapped for the values above, and
+   [words](/path) becomes a link */
 export interface LegalSection { heading?: string; paragraphs: string[]; points?: string[] }
 export interface LegalPageContent { title: string; intro: string; sections: LegalSection[] }
 
@@ -44,6 +49,28 @@ export const LEGAL_PAGES: Record<'about' | 'privacy' | 'terms', LegalPageContent
                 paragraphs: [
                     `${SITE.brand} is an independent project by ${SITE.operators}, computer science students in Regina. We built it because checking schedules, live buses and directions meant switching between several tools.`,
                     'We are not part of the City of Regina or Regina Transit, and the City has not endorsed this site. For service changes, detours and anything official, check regina.ca.',
+                ],
+            },
+            {
+                heading: 'Who we are',
+                paragraphs: [
+                    `[${FOUNDERS.dev.name}](/connect/${FOUNDERS.dev.slug}) founded ${SITE.brand} and built most of it end to end: the map screens, the server behind them, accounts, the admin side and the security. [${FOUNDERS.nirjar.name}](/connect/${FOUNDERS.nirjar.slug}) built the trip planner and the live tracking that follows your ride. We started in January 2026 and run it in our own time. More about both of us, and how the site got here, is on [the team page](/connect).`,
+                ],
+            },
+            {
+                heading: 'How the live map works',
+                paragraphs: [],
+                points: [
+                    "Each Regina Transit bus reports where it is by GPS, and Regina Transit publishes those positions for riders (the TransitLive feed). Our server reads the feed and shares one copy with everyone, so the map asks for fresh positions about every 1.5 seconds. Between reports, buses glide along their route instead of jumping.",
+                    "Arrival times at a stop are Regina Transit's own predictions from the same feed, worked out from where each bus is. They move as the bus does, and they can be off when a bus is held up, detoured or stops reporting.",
+                    "If the feed stops answering, the map keeps the buses where they were last seen and says so. If no buses are reporting at all (late at night, or when service is suspended), the map says that too, instead of showing an empty map.",
+                    'Trip plans use the route and stop data, live arrival predictions and walking paths between stops, and rank the best five trips, with transfers where they help.',
+                ],
+            },
+            {
+                heading: 'How the timetables work',
+                paragraphs: [
+                    "Every [route](/routes) and stop page shows the scheduled times from the City of Regina's published timetable (its GTFS open data): the first and last bus, how often buses run, and every departure. The pages say which dates the timetable covers and list holidays. When the City publishes a new timetable, we update the site from it. Scheduled times are what should happen; the live map shows what is happening.",
                 ],
             },
             {

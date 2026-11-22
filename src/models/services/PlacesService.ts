@@ -17,9 +17,18 @@ export interface PlaceSuggestion {
 }
 
 export class PlacesService {
-    // Resolves once the Places library is available (script is loaded by useMapController)
-    static async load(): Promise<google.maps.PlacesLibrary> {
-        return (await google.maps.importLibrary('places')) as google.maps.PlacesLibrary;
+    // Loads the Places library the first time it's needed (the Maps script itself is loaded by
+    // useMapController); later calls get the same copy
+    private static places: Promise<google.maps.PlacesLibrary> | null = null;
+    static load(): Promise<google.maps.PlacesLibrary> {
+        PlacesService.places ??= (google.maps.importLibrary('places') as Promise<google.maps.PlacesLibrary>)
+            .catch(err => { PlacesService.places = null; throw err; });
+        return PlacesService.places;
+    }
+
+    /** True once the Maps script is there, so the search box can be used (Places then loads on demand) */
+    static mapsReady(): boolean {
+        return typeof google !== 'undefined' && typeof google.maps?.importLibrary === 'function';
     }
 
     static async createSessionToken(): Promise<google.maps.places.AutocompleteSessionToken> {

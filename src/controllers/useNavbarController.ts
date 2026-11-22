@@ -20,6 +20,7 @@ export function useNavbarController(onPlaceSelect?: (place: PlaceResult) => void
         setValue,
         clearSuggestions,
         getLocation,
+        warm,
     } = usePlacesAutocomplete(300);
 
     // Update search input text and show dropdown
@@ -69,8 +70,9 @@ export function useNavbarController(onPlaceSelect?: (place: PlaceResult) => void
 
     // Show dropdown when input is focused and there are results
     const handleFocus = useCallback(() => {
+        warm();   // start loading address search now, before the first letter is typed
         if (data.length > 0) setShowResults(true);
-    }, [data.length]);
+    }, [data.length, warm]);
 
     return {
         ready,

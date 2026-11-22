@@ -26,6 +26,7 @@ export function useTripPlannerController(liveBuses?: BusPosition[], walkMultipli
         setValue: setDestValue,
         clearSuggestions,
         getLocation,
+        warm,
     } = usePlacesAutocomplete(300);
 
     // Get user's current GPS position as origin
@@ -150,8 +151,9 @@ export function useTripPlannerController(liveBuses?: BusPosition[], walkMultipli
 
     // Show dropdown on focus if results exist
     const handleDestFocus = useCallback(() => {
+        warm();   // start loading address search now, before the first letter is typed
         if (data.length > 0) setShowDestSuggestions(true);
-    }, [data.length]);
+    }, [data.length, warm]);
 
     return {
         origin,

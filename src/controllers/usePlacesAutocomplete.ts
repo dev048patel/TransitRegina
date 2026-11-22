@@ -18,13 +18,17 @@ export function usePlacesAutocomplete(debounceMs = 300) {
     // Last fetched predictions, kept after clearSuggestions() so getLocation() can reuse the session
     const lastPredictionsRef = useRef<Map<string, google.maps.places.PlacePrediction>>(new Map());
 
-    // Wait for the Places library before enabling the input
+    // The input works as soon as the Maps script has loaded; the Places library itself loads when
+    // the box is first used (warm, or the first search), not with the map
     useEffect(() => {
-        let cancelled = false;
-        PlacesService.load()
-            .then(() => { if (!cancelled) setReady(true); })
-            .catch(err => console.error('Failed to load Google Places library:', err));
-        return () => { cancelled = true; };
+        if (PlacesService.mapsReady()) { setReady(true); return; }
+        const id = setInterval(() => { if (PlacesService.mapsReady()) { setReady(true); clearInterval(id); } }, 250);
+        return () => clearInterval(id);
+    }, []);
+
+    /** Start loading Places now (call when the search box gets focus), so the first results come quicker */
+    const warm = useCallback(() => {
+        if (PlacesService.mapsReady()) PlacesService.load().catch(err => console.error('Failed to load Google Places library:', err));
     }, []);
 
     useEffect(() => () => clearTimeout(debounceRef.current), []);
@@ -86,5 +90,6 @@ export function usePlacesAutocomplete(debounceMs = 300) {
         setValue,
         clearSuggestions,
         getLocation,
+        warm,
     };
 }

@@ -9,6 +9,7 @@
 */
 import { SITE } from '../data/legal';
 import { FOUNDERS } from '../data/siteFacts';
+import { formatTime } from '../lib/clockTime';
 import type { RouteInfo, StopInfo } from '../services/TransitDirectory';
 
 export const SITE_URL = 'https://transitregina.ca';
@@ -21,6 +22,9 @@ export interface PageMeta {
     description: string;
     /** Keep out of search results (sign-in, profile, error pages) */
     noindex?: boolean;
+    /** Origins the page needs straight away, connected to early: the map's Google Maps script and images
+        (fetched without CORS, so the hint has no crossorigin either) */
+    preconnect?: string[];
     jsonLd?: object[];
 }
 
@@ -109,6 +113,7 @@ export const MAP_META: PageMeta = {
     // The map is the app itself, with no text of its own for search engines to read; the homepage and
     // /routes are the pages to send people to for "Regina bus map"
     noindex: true,
+    preconnect: ['https://maps.googleapis.com', 'https://maps.gstatic.com'],
 };
 
 export function routeMeta(r: RouteInfo): PageMeta {
@@ -125,8 +130,9 @@ export function routeMeta(r: RouteInfo): PageMeta {
             `Route ${r.num} ${short} | Transit Regina`,
         ]),
         description: fitDescription([
-            `Where is the route ${r.num} bus right now? See route ${r.num}${ends} live, all ${r.stopCount} stops in order both ways, and where to change to other Regina buses.`,
-            `Where is the route ${r.num} bus right now? See it live, all ${r.stopCount} stops in order both ways, and where to change to other Regina buses.`,
+            `Route ${r.num}${ends}: when it runs and how often, the timetable, all ${r.stopCount} stops in order both ways, and the buses live on the map.`,
+            `Regina bus route ${r.num}: when it runs and how often, the timetable, all ${r.stopCount} stops in order both ways, and the buses live on the map.`,
+            `Regina bus route ${r.num}: timetable, all ${r.stopCount} stops in order and the buses live on the map.`,
         ]),
         jsonLd: [
             crumbs([['Home', '/'], ['Bus routes', '/routes'], [`Route ${r.num} ${r.name}`, path]]),
@@ -150,6 +156,7 @@ export function stopMeta(s: StopInfo): PageMeta {
     const dirShort = s.direction ? ` (${DIRECTION_SHORT[s.direction] ?? s.direction})` : '';
     const dirWords = s.direction ? `, ${s.direction.toLowerCase()}` : '';
     const towards = s.routes.length === 1 ? ` towards ${s.routes[0].towards}` : '';
+    const weekday = s.hours.weekday ? ` Weekdays ${formatTime(s.hours.weekday[0])} to ${formatTime(s.hours.weekday[1])}.` : '';
     return {
         path,
         title: fit([
@@ -159,12 +166,12 @@ export function stopMeta(s: StopInfo): PageMeta {
             `Stop ${s.id}: ${s.name}${dirShort}, Regina`,
             `Stop ${s.id}: ${s.name}${dirShort}`,
         ]),
-        // What the page has: the routes and where they go, the stops either side and nearby, and a link
-        // to live arrivals (the arrivals themselves are on the map, not on this page)
+        // What the page has: the routes, the hours, the full timetable and a link to live arrivals
         description: fitDescription([
-            `Regina bus stop ${s.id}, ${s.name}${dirWords}${served ? `: ${served}${towards}` : ''}. The stops either side, stops nearby and a link to live arrivals.`,
-            `Regina bus stop ${s.id}, ${s.name}${served ? `: ${served}` : ''}. The stops either side, stops nearby and a link to live arrivals.`,
-            `Regina bus stop ${s.id}, ${s.name}${served ? `: ${served}` : ''}.`,
+            `Regina bus stop ${s.id}, ${s.name}${dirWords}${served ? `: ${served}${towards}` : ''}.${weekday} Full timetable and live arrivals.`,
+            `Regina bus stop ${s.id}, ${s.name}${dirWords}${served ? `: ${served}` : ''}.${weekday} Full timetable and live arrivals.`,
+            `Regina bus stop ${s.id}, ${s.name}${served ? `: ${served}` : ''}.${weekday} Timetable and live arrivals.`,
+            `Regina bus stop ${s.id}, ${s.name}${served ? `: ${served}` : ''}.${weekday}`,
         ]),
         jsonLd: [
             crumbs(stopCrumbs(s).map(([name, p]) => [name, p ?? path] as [string, string])),
@@ -254,6 +261,7 @@ export function headTags(m: PageMeta): string {
         `<meta name="description" content="${esc(m.description)}" />`,
         `<link rel="canonical" href="${url}" />`,
         m.noindex ? '<meta name="robots" content="noindex" />' : '',
+        ...(m.preconnect ?? []).map(o => `<link rel="preconnect" href="${esc(o)}" />`),
         `<meta property="og:type" content="website" />`,
         `<meta property="og:site_name" content="${esc(SITE.brand)}" />`,
         `<meta property="og:url" content="${url}" />`,

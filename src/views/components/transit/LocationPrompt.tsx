@@ -3,7 +3,10 @@
    is wrong and where to fix it on their phone or computer. Shown on the map page.
 
    Websites can't open the phone's Settings app, so the help gives the precise taps for this device
-   and browser, and the map tries again by itself when the rider comes back (see LocationConsent). */
+   and browser, and the map tries again by itself when the rider comes back (see LocationConsent).
+
+   On a phone the first question starts as a small "Near me" button rather than a card over a third of
+   the map; tapping it opens the same explanation and choice. */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Copy, LocateFixed, LocateOff, RotateCw, X } from 'lucide-react';
@@ -16,6 +19,7 @@ export default function LocationPrompt() {
     const [helpOpen, setHelpOpen] = useState(true);
     const [trying, setTrying] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [asking, setAsking] = useState(() => !window.matchMedia('(max-width: 640px)').matches);
 
     const tryAgain = async () => {
         setTrying(true);
@@ -92,6 +96,18 @@ export default function LocationPrompt() {
                     <p className="mt-3 text-xs text-slate-400">Fixed it in Settings? Just come back here; the map checks again on its own.</p>
                 )}
             </div>
+        );
+    }
+
+    if (!asking) {
+        return (
+            <button
+                onClick={() => setAsking(true)}
+                aria-label="Show buses near you: about using your location"
+                className="fixed z-[1000] right-3 bottom-[118px] h-11 rounded-full bg-white shadow-lg border border-slate-200 pl-3 pr-4 flex items-center gap-2 text-sm font-semibold text-[#1a73e8]"
+            >
+                <LocateFixed size={18} /> Near me
+            </button>
         );
     }
 

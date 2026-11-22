@@ -1,5 +1,6 @@
 /* Landing page controller — aggregates mock data for all landing page sections */
 import { heroContent, stats, features, steps, problemSolutions, faqItems, technologies } from '../../models/data/mock/landingMockData';
+import { ROUTE_LINKS } from '../../models/data/siteFacts';
 
 export function useLandingController() {
     return {
@@ -9,6 +10,7 @@ export function useLandingController() {
         steps,
         problemSolutions,
         faqItems,
-        technologies
+        technologies,
+        routes: ROUTE_LINKS
     };
 }

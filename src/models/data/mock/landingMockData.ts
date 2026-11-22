@@ -1,26 +1,29 @@
 // Mock Data for Landing Page
 import { HeroContent, Stat, Feature, Step, ProblemSolution, FAQItem, Technology } from '../../landing/LandingTypes';
+import { ROUTE_LINKS, STOP_COUNT } from '../siteFacts';
 
 export const heroContent: HeroContent = {
-    headline: "Never Miss Your Bus Again",
-    subheadline: "Real-time bus tracking, live stop arrivals, and smart route planning—all designed for Regina's unpredictable weather and transit schedules.",
-    primaryCTA: "Get Started Free",
+    // The same words as the homepage's pre-rendered text (scripts/prerender.tsx), so search engines
+    // and people read one page. The part after the colon is drawn in blue.
+    headline: "Regina bus tracker: every bus, live",
+    subheadline: "Never miss your bus again. See every Regina bus live on the map, check when your bus is coming at any stop, and plan trips with transfers.",
+    primaryCTA: "Open the live map",
     trustIndicators: [
-        "Built for Regina bus riders",
         "Free to use",
-        "Real-time tracking"
+        "No account needed",
+        "Built by University of Regina students"
     ]
 };
 
 export const stats: Stat[] = [
     {
         label: "Regina Routes Covered",
-        value: "22",
+        value: String(ROUTE_LINKS.length),
         icon: "Route"
     },
     {
         label: "Bus Stops Mapped",
-        value: "1,400+",
+        value: STOP_COUNT.toLocaleString('en-CA'),
         icon: "MapPin"
     },
     {

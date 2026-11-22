@@ -8,7 +8,7 @@ import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowRight, Bus, ChevronRight, MapPin, Navigation } from 'lucide-react';
 import { ROUTES, routeBySlug, stopBySlug, stopName, stopSlug, project, svgPathNear, type RouteInfo, type StopInfo } from '../../models/services/TransitDirectory';
-import { HOME_META, ROUTES_META, routeMeta, stopMeta } from '../../models/seo/pageMeta';
+import { HOME_META, routeMeta, routesIndexMeta, stopCrumbs, stopMeta } from '../../models/seo/pageMeta';
 import { usePageMeta } from '../../controllers/usePageMeta';
 import { SITE } from '../../models/data/legal';
 import IndependenceNotice from '../components/IndependenceNotice';
@@ -104,7 +104,7 @@ function StopMap({ info, routes }: { info: StopInfo; routes: RouteInfo[] }) {
 
 /* ── /routes ── */
 export function RoutesIndexPage() {
-    usePageMeta(ROUTES_META);
+    usePageMeta(routesIndexMeta(ROUTES));
     const named = (word: string) => ROUTES.filter(r => r.name.toLowerCase().includes(word));
     return (
         <Shell crumbs={[['Home', '/'], ['Bus routes']]}>
@@ -134,7 +134,7 @@ export function RoutesIndexPage() {
             <Faq items={[
                 ['Which buses go to the University of Regina?', <>Routes with University in their name: {named('university').map((r, i) => <React.Fragment key={r.num}>{i ? ', ' : ''}<Link to={`/routes/${r.slug}`}>route {r.num} {r.name}</Link></React.Fragment>)}. Other routes stop nearby too; the live map shows them all.</>],
                 ['Is there a bus to Regina airport?', <>{named('airport').map(r => <Link key={r.num} to={`/routes/${r.slug}`}>Route {r.num} {r.name}</Link>)} runs between the airport and downtown. Check the live map before you leave, as service can change.</>],
-                ['Which buses go downtown?', <>Routes with downtown in their name: {named('downtown').map((r, i) => <React.Fragment key={r.num}>{i ? ', ' : ''}<Link to={`/routes/${r.slug}`}>route {r.num}</Link></React.Fragment>)}. Most other routes also pass through downtown; each route page lists its stops.</>],
+                ['Which buses go downtown?', <>Routes with downtown in their name: {named('downtown').map((r, i) => <React.Fragment key={r.num}>{i ? ', ' : ''}<Link to={`/routes/${r.slug}`}>route {r.num} {r.name}</Link></React.Fragment>)}. Most other routes also pass through downtown; each route page lists its stops.</>],
                 ['Is this the official Regina Transit timetable?', <>No. {SITE.brand} is an independent project built on the City of Regina's open data. For official schedules and service notices, see <a href={SITE.officialUrl}>regina.ca</a>.</>],
             ]} />
         </Shell>
@@ -215,10 +215,10 @@ export function StopPage() {
     if (!info) return <NotFoundPage />;
     const routes = info.routes.map(r => r.route).filter((r, i, a) => a.findIndex(x => x.num === r.num) === i);
     return (
-        <Shell crumbs={[['Home', '/'], ['Bus routes', '/routes'], [`Stop ${info.id}`]]}>
+        <Shell crumbs={stopCrumbs(info)}>
             <p className="font-mono text-sm font-bold text-[#2E7D32]">Stop #{info.id}</p>
             <h1 className="text-3xl font-black tracking-tight sm:text-4xl">{info.name}</h1>
-            <p className="mt-1 text-lg text-slate-600">Regina bus stop {info.id}{info.direction ? ` · ${info.direction}` : ''}{routes.length ? ` · routes ${routes.map(r => r.num).join(', ')}` : ''}</p>
+            <p className="mt-1 text-lg text-slate-600">Regina bus stop {info.id}{info.direction ? ` · ${info.direction}` : ''}{routes.length ? ` · route${routes.length > 1 ? 's' : ''} ${routes.map(r => r.num).join(', ')}` : ''}</p>
             <div className="mt-5"><LiveButton to={`/map?stop=${info.id}`}>See live arrivals at stop {info.id}</LiveButton></div>
             <p className="mt-3 text-sm text-slate-500">The 4-digit number {info.id} is on the sign at the stop.</p>
 

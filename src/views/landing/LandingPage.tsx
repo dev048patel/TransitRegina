@@ -25,9 +25,10 @@ import TechnologyTrust from './sections/TechnologyTrust';
 import FAQ from './sections/FAQ';
 import FinalCTA from './sections/FinalCTA';
 import LandingFooter from './sections/LandingFooter';
+import RouteLinks from './sections/RouteLinks';
 
 export default function LandingPage() {
-    const { hero, stats, features, steps, problemSolutions, faqItems, technologies } = useLandingController();
+    const { hero, stats, features, steps, problemSolutions, faqItems, technologies, routes } = useLandingController();
 
     return (
         <div className="relative min-h-screen" style={{ background: '#F7F8FA' }}>
@@ -58,6 +59,19 @@ export default function LandingPage() {
                 </Link>
             </div>
 
+            {/* The main places to go, top-right */}
+            <nav aria-label="Main" className="fixed top-0 right-0 z-50 p-4 sm:p-6">
+                <ul className="flex items-center gap-1 rounded-full border border-[#003DA5]/10 bg-white/85 p-1 shadow-sm backdrop-blur">
+                    {[['/map', 'Map'], ['/routes', 'Routes'], ['/about', 'About']].map(([to, label]) => (
+                        <li key={to}>
+                            <Link to={to} className="block rounded-full px-3 py-1.5 text-sm font-bold text-[#003DA5] no-underline transition-colors hover:bg-[#003DA5]/10 sm:px-4 sm:text-base">
+                                {label}
+                            </Link>
+                        </li>
+                    ))}
+                </ul>
+            </nav>
+
             <div className="relative" style={{ zIndex: 1 }}>
                 <HeroSection
                     headline={hero.headline}
@@ -71,6 +85,7 @@ export default function LandingPage() {
                 <ProblemSolution problemSolutions={problemSolutions} />
                 <ComparisonTable />
                 <TechnologyTrust technologies={technologies} />
+                <RouteLinks routes={routes} />
                 <FAQ faqItems={faqItems} />
                 <FinalCTA />
                 <LandingFooter />

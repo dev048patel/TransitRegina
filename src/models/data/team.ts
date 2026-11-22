@@ -4,6 +4,7 @@
    Fields left as '' or [] are still to be filled in. In development the page shows a dashed
    reminder box in their place; on the live site those parts are simply left out. */
 import type { MarkerCharacterId } from './markerCharacters';
+import { FOUNDERS, STOP_COUNT } from './siteFacts';
 
 /** The skill areas the game's skills map groups everything into */
 export const SKILL_AREAS = ['Frontend', 'Backend & APIs', 'Security', 'Algorithms & data', 'Cloud & DevOps', 'Product & design', 'People & leadership'] as const;
@@ -90,8 +91,8 @@ const photoFor = (slug: string) =>
    the trip planner (68% of it) and in tracking and live-bus motion (79%). Edit the wording freely. */
 export const TEAM: TeamMember[] = [
     {
-        slug: 'dev',
-        name: 'Dev Paresh Patel',
+        slug: FOUNDERS.dev.slug,
+        name: FOUNDERS.dev.name,
         title: 'Founder',
         focus: 'Full-stack: Frontend, Backend & Security',
         character: 'astronaut',
@@ -114,7 +115,7 @@ export const TEAM: TeamMember[] = [
         ],
         built: [
             { title: 'The live map', sub: 'What riders see first', detail: 'Every Regina bus moving on one map, refreshed every 1.5 seconds and coloured by route, with a "you are here" marker, saved places, a profile page and a full phone layout. Most of what a rider taps, I built.', tags: ['React 19', 'TypeScript', 'Google Maps', 'Tailwind CSS'], stat: { value: '1.5 s', label: 'between live updates' }, hook: 'Every bus in Regina, live, on one screen in your pocket.', problem: 'Riders juggled a schedule site, a live map and Google Maps, and still missed the bus.', did: 'Dev built the map riders actually use: live buses, a "you are here" dot, saved places, and a layout made for one thumb.', how: 'Every 1.5 seconds new positions arrive, and one shared store (the Observer pattern) updates the map, the panel and the stop board in the same instant.', challenge: 'Hundreds of riders asking every 1.5 seconds would hammer the city\'s feed. The API keeps one shared copy, never more than half a second old, so TransitLive sees at most two requests a second however many people have the map open.', areas: ['Frontend', 'Backend & APIs'] },
-            { title: 'Stop board and live arrivals', sub: 'Built end to end', detail: 'Tap any stop and see every departure left today. Behind it, an Express API sits in front of the TransitLive feed and shares one copy between all riders, so the feed is asked once, not once per phone.', tags: ['Express 5', 'Node.js', 'REST API', 'Caching'], stat: { value: '1,400+', label: 'stops covered' }, hook: 'Tap any stop. See every bus still coming today.', problem: 'A timetable tells you when a bus should come. Not when it will.', did: 'Dev built both halves: the Express API in front of Regina Transit\'s live feed, and the board riders tap.', how: 'Tap a stop and our API fetches TransitLive\'s predicted arrivals for the rest of the day (up to 100 departures) and hands them to the board.', challenge: 'The feed is not ours and can be slow or down. Every call gives up after 8 seconds instead of freezing the screen, and the map warns riders after three failed refreshes in a row that what they see may be out of date.', areas: ['Backend & APIs', 'Frontend'] },
+            { title: 'Stop board and live arrivals', sub: 'Built end to end', detail: 'Tap any stop and see every departure left today. Behind it, an Express API sits in front of the TransitLive feed and shares one copy between all riders, so the feed is asked once, not once per phone.', tags: ['Express 5', 'Node.js', 'REST API', 'Caching'], stat: { value: STOP_COUNT.toLocaleString('en-CA'), label: 'stops covered' }, hook: 'Tap any stop. See every bus still coming today.', problem: 'A timetable tells you when a bus should come. Not when it will.', did: 'Dev built both halves: the Express API in front of Regina Transit\'s live feed, and the board riders tap.', how: 'Tap a stop and our API fetches TransitLive\'s predicted arrivals for the rest of the day (up to 100 departures) and hands them to the board.', challenge: 'The feed is not ours and can be slow or down. Every call gives up after 8 seconds instead of freezing the screen, and the map warns riders after three failed refreshes in a row that what they see may be out of date.', areas: ['Backend & APIs', 'Frontend'] },
             { title: 'Architecture', sub: 'The shape every feature follows', detail: 'A strict model-view-controller split: views draw, controllers decide, models own the data. The Observer pattern keeps live bus positions in step across the map, the tracking panel and the stop details from a single source.', tags: ['MVC', 'Observer pattern', 'TypeScript'], stat: { value: '35,000', label: 'lines of TypeScript in the app' }, hook: 'Why two students could ship fast without breaking things.', problem: 'Features were piling up quickly, with two people editing the same app.', did: 'Dev set the rule every screen follows and reorganised the whole codebase into models, views and controllers.', how: 'Views draw. Controllers decide. Models own the data. Nothing skips a layer, so a change stays where it belongs.', challenge: 'Moving a working app into strict layers while features kept shipping. The March 2026 reorganisation set a rule that views may never call services directly, so every later feature, from the planner to the admin panel, had one obvious place to go.', areas: ['Backend & APIs', 'Frontend'] },
             { title: 'Accounts and admin sign-in', sub: 'Who you are, and what you may do', detail: 'Sign-up and sign-in on Supabase, role-protected admin routes, a second step for admins with an authenticator code, a 30-minute idle sign-out, and a Terms agreement the server enforces, not just the screen.', tags: ['Supabase Auth', 'Two-step sign-in', 'Row-level security'], stat: { value: '2 steps', label: 'to sign in as an admin' }, hook: 'Locked the doors without making riders feel the lock.', problem: 'Admins can switch features off for everyone. A stolen admin password would be a disaster.', did: 'Dev built sign-in, admin roles, a second step with an authenticator code, a 30-minute idle sign-out and a Terms check.', how: 'On every request the server checks your token, role, account status and Terms. Hiding a button is never the only guard.', challenge: 'Adding a Terms rule without locking anyone out. Accounts that have not agreed yet can make exactly two requests (agree, or delete the account); everything else gets a clear 403 until they do.', areas: ['Security', 'Backend & APIs'] },
             { title: 'Admin panel', sub: 'Running the service', detail: 'Everything needed to run Transit Regina day to day: people and roles, an on/off switch for every feature, service settings, usage insights and a security centre.', tags: ['React', 'Supabase', 'Role-based access'], hook: 'Run the whole service without touching a line of code.', problem: 'A live service needs changes at 2 a.m., without a redeploy.', did: 'Dev built the control room: people and roles, an on/off switch for every feature, insights and a security centre.', how: 'Switches live in Postgres and the server enforces them, so off really means off.', challenge: 'A switch that only hides a button can be bypassed by calling the API directly. Each switch is enforced twice: by the server on every request, and by the database itself.', areas: ['Frontend', 'Product & design'] },
@@ -141,15 +142,15 @@ export const TEAM: TeamMember[] = [
             { name: 'AlgoLens', problem: 'A student stuck on a maths problem needs the steps, not just the answer.', blurb: 'An Android app that solved photographed math problems step by step, built on a custom OCR pipeline with a backend on Microsoft Azure. Retired over API costs.', tags: ['Kotlin', 'Android', 'OCR', 'Azure'], stat: { value: '30+', label: 'University of Regina students used it' }, status: 'Retired', hook: 'Photograph a maths problem, get the steps.', areas: ['Algorithms & data', 'Cloud & DevOps'] },
             { name: 'AI Finance Platform', blurb: 'A personal finance app with AI-written spending summaries and live dashboards.', tags: ['Next.js', 'Prisma', 'Supabase', 'Gemini API'], link: 'https://github.com/dev048patel/AI-Finance', hook: 'Your spending, summarised by AI.', areas: ['Frontend', 'Algorithms & data'] },
         ],
-        linkedin: 'https://www.linkedin.com/in/dev-patel-itsme/',
-        github: 'https://github.com/dev048patel',
+        linkedin: FOUNDERS.dev.linkedin,
+        github: FOUNDERS.dev.github,
         email: '',
         resume: '',
         openToWork: false,
     },
     {
-        slug: 'nirjar',
-        name: 'Nirjar Patel',
+        slug: FOUNDERS.nirjar.slug,
+        name: FOUNDERS.nirjar.name,
         title: 'Co-Founder',
         focus: 'Trip Planning, Live Tracking & Maps',
         character: 'fox',
@@ -195,8 +196,8 @@ export const TEAM: TeamMember[] = [
             { name: 'Stock Price Prediction Dashboard', blurb: 'Forecasts daily share prices in the agri-food sector with an LSTM and Prophet, scores both against a no-change baseline in a rolling backtest, and presents the results in a live dashboard and a quarterly Excel report.', tags: ['Python', 'TensorFlow', 'Prophet', 'FastAPI', 'SQLite'], stat: { value: '9', label: 'agri-food companies forecast' }, link: 'https://github.com/nirjar1012/stock-prediction-dashboard', hook: 'Forecasts agri-food share prices, honestly back-tested.', areas: ['Algorithms & data'] },
             { name: 'Chatty', blurb: 'A real-time chat app on the MERN stack with Socket.io: secure sign-in, online presence, profile pictures and a choice of themes.', tags: ['React', 'Node.js', 'MongoDB', 'Socket.io'], stat: { value: '30+', label: 'themes to pick from' }, status: 'Live', link: 'https://chat-temp-two.vercel.app', linkLabel: 'Open the live demo', hook: 'Real-time chat with 30+ themes to pick from.', areas: ['Frontend', 'Backend & APIs'] },
         ],
-        linkedin: 'https://www.linkedin.com/in/nirjarpatel/',
-        github: 'https://github.com/nirjar1012',
+        linkedin: FOUNDERS.nirjar.linkedin,
+        github: FOUNDERS.nirjar.github,
         email: '',
         resume: '',
         openToWork: false,
@@ -226,7 +227,7 @@ export const TIMELINE = [
 export const PROJECT_NUMBERS = [
     { value: 'Jan 2026', label: 'Building since' },
     { value: '22', label: 'Regina routes' },
-    { value: '1,400+', label: 'Bus stops' },
+    { value: STOP_COUNT.toLocaleString('en-CA'), label: 'Bus stops' },
     { value: '1.5 s', label: 'Live refresh' },
 ];
 

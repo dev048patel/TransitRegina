@@ -17,20 +17,27 @@ const iconMap: { [key: string]: React.FC<{ size?: number, className?: string }> 
     Target
 };
 
-// Counter animation component
+// Counter animation component. The real number is there from the first paint, so search engines,
+// screenshots and anyone who never scrolls see it (not "0"). Just before it scrolls into view it counts
+// up from zero; not at all with reduced motion, or for automated browsers such as search engine crawlers.
 function AnimatedCounter({ targetValue }: { targetValue: string }) {
-    const [count, setCount] = useState(0);
-    const ref = useRef<HTMLDivElement>(null);
-    const isInView = useInView(ref, { once: true });
-
     // Extract number from string (e.g., "25+" => 25, "10,000+" => 10000)
     const numericValue = parseInt(targetValue.replace(/[^0-9]/g, '')) || 0;
     const suffix = targetValue.match(/[^0-9]+$/)?.[0] || '';
 
+    const [count, setCount] = useState(numericValue);
+    const ref = useRef<HTMLDivElement>(null);
+    const isInView = useInView(ref, { once: true, margin: '0px 0px 120px 0px' });
+
     useEffect(() => {
         if (!isInView) return;
+        if (navigator.webdriver || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        // Already on screen when the page opened: leave the number alone rather than drop it to zero
+        const box = ref.current?.getBoundingClientRect();
+        if (box && box.top < window.innerHeight && box.bottom > 0) return;
 
         let start = 0;
+        setCount(0);
         const duration = 2000; // 2 seconds
         const increment = numericValue / (duration / 16); // 60fps
 

@@ -23,6 +23,8 @@ interface HeroSectionProps {
 const character = (id: string) => MARKER_CHARACTERS.find(c => c.id === id)!.src;
 
 export default function HeroSection({ headline, subheadline, primaryCTA, trustIndicators }: HeroSectionProps) {
+    // "Regina bus tracker: every bus, live": the part after the colon is drawn in blue
+    const [lead, rest] = headline.split(/:\s*(.*)/s);
     return (
         <section className="relative min-h-screen flex items-center overflow-hidden">
             <MotionConfig reducedMotion="user">
@@ -51,13 +53,7 @@ export default function HeroSection({ headline, subheadline, primaryCTA, trustIn
                         </div>
 
                         <h1 className="text-5xl sm:text-6xl lg:text-7xl xl:text-8xl font-black tracking-tight leading-[1.02] text-slate-900 mb-7">
-                            {headline.split(' ').map((word, i) => (
-                                <React.Fragment key={i}>
-                                    {i === 3
-                                        ? <span className="bg-gradient-to-r from-[#003DA5] to-[#0066FF] bg-clip-text text-transparent">{word}</span>
-                                        : word}{' '}
-                                </React.Fragment>
-                            ))}
+                            {lead}{rest && <>: <span className="bg-gradient-to-r from-[#003DA5] to-[#0066FF] bg-clip-text text-transparent">{rest}</span></>}
                         </h1>
 
                         <p className="text-xl md:text-2xl leading-relaxed text-slate-600 max-w-2xl mb-10">
@@ -116,6 +112,9 @@ export default function HeroSection({ headline, subheadline, primaryCTA, trustIn
                                     {/* Screen — the live map */}
                                     <div className="relative h-full rounded-[2.5rem] overflow-hidden">
                                         <MapCanvas />
+
+                                        {/* A made-up screen, so it says so: these aren't real buses or times */}
+                                        <span className="absolute top-2 right-5 z-20 rounded-full bg-slate-900/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Example</span>
 
                                         {/* You are here */}
                                         <div className="absolute left-[46%] top-[58%] -translate-x-1/2 -translate-y-1/2">

@@ -342,11 +342,15 @@ export default function FeaturesCarousel({ features }: FeaturesCarouselProps) {
                                     const Frame = current.mockup === 'phone' ? PhoneMockup : LaptopMockup;
 
                                     return (
-                                        <Frame>
-                                            {current.video
-                                                ? <Clip video={current.video} alt={features[activeFeature].title} paused={paused} onProgress={setProgress} />
-                                                : <current.Demo />}
-                                        </Frame>
+                                        <>
+                                            <Frame>
+                                                {current.video
+                                                    ? <Clip video={current.video} alt={features[activeFeature].title} paused={paused} onProgress={setProgress} />
+                                                    : <current.Demo />}
+                                            </Frame>
+                                            {/* A made-up screen, so it says so: these aren't real buses or times */}
+                                            <span className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 rounded-full bg-slate-900/75 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white">Example</span>
+                                        </>
                                     );
                                 })()}
                             </motion.div>

@@ -8,12 +8,12 @@
   <meta name="theme-color" content="#1a73e8" />
   <!-- The title, description, canonical, social preview and structured data below are the homepage's.
        scripts/prerender.tsx replaces them on every page at build time (src/models/seo/pageMeta.ts). -->
-  <meta name="description" content="See every Regina bus live on the map, check when your bus is coming at any stop, and plan trips with transfers. Free and unofficial, built by two University of Regina students." />
+  <meta name="description" content="See every Regina bus live on the map, check when your bus is coming at any stop, and plan trips with transfers. Free, unofficial and built in Regina." />
   <link rel="canonical" href="https://transitregina.ca/" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Transit Regina" />
   <meta property="og:url" content="https://transitregina.ca/" />
-  <meta property="og:title" content="Regina Bus Tracker: Live Bus Map &amp; Trip Planner | Transit Regina" />
+  <meta property="og:title" content="Regina Bus Tracker: Live Map &amp; Trip Planner | Transit Regina" />
   <meta property="og:description" content="Live bus positions, arrival times and trip planning for Regina riders. An independent project, not affiliated with the City of Regina or Regina Transit." />
   <meta property="og:image" content="https://transitregina.ca/og-logo.jpg" />
   <meta property="og:image:width" content="1200" />
@@ -23,16 +23,99 @@
   <script type="application/ld+json" data-page-ld>
     {
       "@context": "https://schema.org",
-      "@type": "WebApplication",
-      "name": "Transit Regina",
-      "url": "https://transitregina.ca/",
-      "description": "Unofficial real-time bus tracker and trip planner for Regina, Saskatchewan. Not affiliated with the City of Regina or Regina Transit.",
-      "applicationCategory": "TravelApplication",
-      "operatingSystem": "Web",
-      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CAD" },
-      "creator": [
-        { "@type": "Person", "name": "Dev Patel", "url": "https://transitregina.ca/connect/dev", "sameAs": ["https://www.linkedin.com/in/dev-patel-itsme/", "https://github.com/dev048patel"] },
-        { "@type": "Person", "name": "Nirjar Patel", "url": "https://transitregina.ca/connect/nirjar", "sameAs": ["https://www.linkedin.com/in/nirjarpatel/", "https://github.com/nirjar1012"] }
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://transitregina.ca/#website",
+          "url": "https://transitregina.ca/",
+          "name": "Transit Regina",
+          "alternateName": "TransitR",
+          "description": "Unofficial real-time bus tracker and trip planner for Regina, Saskatchewan.",
+          "inLanguage": "en-CA",
+          "publisher": {
+            "@id": "https://transitregina.ca/#org"
+          }
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://transitregina.ca/#org",
+          "name": "Transit Regina",
+          "url": "https://transitregina.ca/",
+          "logo": "https://transitregina.ca/logo512.png",
+          "description": "Unofficial real-time bus tracker and trip planner for Regina, Saskatchewan, built by two University of Regina students.",
+          "disambiguatingDescription": "An independent project, not affiliated with, endorsed by or operated by the City of Regina or Regina Transit.",
+          "email": "transitregina.ca@gmail.com",
+          "areaServed": {
+            "@type": "City",
+            "name": "Regina",
+            "containedInPlace": {
+              "@type": "AdministrativeArea",
+              "name": "Saskatchewan"
+            }
+          },
+          "founder": [
+            {
+              "@id": "https://transitregina.ca/connect/dev#person"
+            },
+            {
+              "@id": "https://transitregina.ca/connect/nirjar#person"
+            }
+          ]
+        },
+        {
+          "@type": "Person",
+          "@id": "https://transitregina.ca/connect/dev#person",
+          "name": "Dev Patel",
+          "url": "https://transitregina.ca/connect/dev",
+          "sameAs": [
+            "https://www.linkedin.com/in/dev-patel-itsme/",
+            "https://github.com/dev048patel"
+          ]
+        },
+        {
+          "@type": "Person",
+          "@id": "https://transitregina.ca/connect/nirjar#person",
+          "name": "Nirjar Patel",
+          "url": "https://transitregina.ca/connect/nirjar",
+          "sameAs": [
+            "https://www.linkedin.com/in/nirjarpatel/",
+            "https://github.com/nirjar1012"
+          ]
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://transitregina.ca/#app",
+          "name": "Transit Regina",
+          "url": "https://transitregina.ca/map",
+          "applicationCategory": "TravelApplication",
+          "operatingSystem": "Any (web browser)",
+          "inLanguage": "en-CA",
+          "description": "Unofficial real-time bus tracker and trip planner for Regina, Saskatchewan. An independent project, not affiliated with, endorsed by or operated by the City of Regina or Regina Transit.",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "CAD"
+          },
+          "spatialCoverage": {
+            "@type": "City",
+            "name": "Regina",
+            "containedInPlace": {
+              "@type": "AdministrativeArea",
+              "name": "Saskatchewan"
+            }
+          },
+          "publisher": {
+            "@id": "https://transitregina.ca/#org"
+          },
+          "creator": [
+            {
+              "@id": "https://transitregina.ca/connect/dev#person"
+            },
+            {
+              "@id": "https://transitregina.ca/connect/nirjar#person"
+            }
+          ]
+        }
       ]
     }
   </script>
@@ -54,7 +137,7 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
-  <title>Regina Bus Tracker: Live Bus Map &amp; Trip Planner | Transit Regina</title>
+  <title>Regina Bus Tracker: Live Map &amp; Trip Planner | Transit Regina</title>
 </head>
 
 <body>

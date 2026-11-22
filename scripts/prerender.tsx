@@ -5,8 +5,9 @@
  For every page it writes the right title, description, canonical address, social preview and
  structured data into the head. The directory pages (every route and stop) and the About, Privacy and
  Terms pages also get their full content in the body, rendered from the same React components the
- app uses, so what search engines read is exactly what people see. The app then starts as usual and
- takes over the page.
+ app uses, so what search engines read is exactly what people see. The homepage and the team pages get
+ the same words from the same data as plain HTML (scripts/snapshots.ts), as their screens only run in a
+ browser. The app then starts as usual and takes over the page.
 
  Files are written as build/<path>.html; vercel.json's cleanUrls serves them at /<path>.
  It also writes build/sitemap.xml listing every page. A page's lastmod is the day its content last
@@ -26,7 +27,8 @@ import { StaticRouter, Routes, Route } from 'react-router';
 import { RoutesIndexPage, RoutePage, StopPage } from '../src/views/directory/DirectoryPages';
 import LegalPage from '../src/views/LegalPage';
 import { ROUTES, SERVED_STOPS, stopInfo } from '../src/models/services/TransitDirectory';
-import { HOME_META, MAP_META, PRIVATE_PREFIXES, ROUTES_META, STATIC_META, SITE_URL, headTags, metaForPath, routeMeta, stopMeta, teamMeta, type PageMeta } from '../src/models/seo/pageMeta';
+import { HOME_META, MAP_META, PRIVATE_PREFIXES, STATIC_META, SITE_URL, headTags, metaForPath, routeMeta, routesIndexMeta, stopMeta, teamMeta, type PageMeta } from '../src/models/seo/pageMeta';
+import { connectSnapshot, homeSnapshot, teamSnapshot } from './snapshots';
 import { TEAM } from '../src/models/data/team';
 import { TRANSIT_DATA_DATE } from '../src/models/data/transitDataDate';
 import { SITE } from '../src/models/data/legal';
@@ -56,14 +58,6 @@ const routes = (
 );
 const render = (url: string) => renderToString(<StaticRouter location={url}>{routes}</StaticRouter>);
 
-/* What the homepage shows before the app starts: the same headline and the ways in */
-const homeSnapshot = `<main data-prerender style="max-width:44rem;margin:0 auto;padding:3rem 1.25rem;font-family:Inter,system-ui,sans-serif">
-<h1>Regina bus tracker: every bus, live</h1>
-<p>See every Regina bus live on the map, check when your bus is coming at any stop, and plan trips with transfers. Free and unofficial, built by two University of Regina students.</p>
-<p><a href="/map">Open the live map</a> · <a href="/routes">All Regina bus routes</a> · <a href="/about">About</a></p>
-<ul>${ROUTES.map(r => `<li><a href="/routes/${r.slug}">Route ${r.num} ${r.name}</a></li>`).join('')}</ul>
-</main>`;
-
 const written: PageMeta[] = [];
 function write(meta: PageMeta, body = '') {
     const html = base
@@ -76,9 +70,9 @@ function write(meta: PageMeta, body = '') {
 }
 
 const started = Date.now();
-write(HOME_META, homeSnapshot);
+write(HOME_META, homeSnapshot());
 write(MAP_META);
-write(ROUTES_META, render('/routes'));
+write(routesIndexMeta(ROUTES), render('/routes'));
 for (const r of ROUTES) write(routeMeta(r), render(`/routes/${r.slug}`));
 let stops = 0;
 for (const s of SERVED_STOPS) {
@@ -88,8 +82,8 @@ for (const s of SERVED_STOPS) {
     stops++;
 }
 for (const p of ['/about', '/privacy', '/terms']) write(STATIC_META[p], render(p));
-write(STATIC_META['/connect']);
-for (const person of TEAM) write(teamMeta(person));
+write(STATIC_META['/connect'], connectSnapshot());
+for (const person of TEAM) write(teamMeta(person), teamSnapshot(person));
 
 /* The app-only pages: just the app, kept out of search results (vercel.json sends /admin/* to /admin) */
 for (const p of PRIVATE_PREFIXES) write(metaForPath(p)!);

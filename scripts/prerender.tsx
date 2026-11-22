@@ -13,6 +13,10 @@
  changed: the transit data for the route and stop pages (TRANSIT_DATA_DATE, set by build:transit-data),
  the policy date for Privacy and Terms. Pages with no such date get none, rather than the build date,
  which would claim every page changed on every deploy and teach search engines to ignore lastmod.
+
+ The app-only pages (sign-in, profile, admin: PRIVATE_PREFIXES in pageMeta.ts) get a noindex page each, so
+ they open directly. Everything else that isn't a file here gets build/404.html with a real 404 status
+ (Vercel serves it), instead of the homepage, which made unknown addresses look like copies of it.
 */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,7 +26,7 @@ import { StaticRouter, Routes, Route } from 'react-router';
 import { RoutesIndexPage, RoutePage, StopPage } from '../src/views/directory/DirectoryPages';
 import LegalPage from '../src/views/LegalPage';
 import { ROUTES, SERVED_STOPS, stopInfo } from '../src/models/services/TransitDirectory';
-import { HOME_META, MAP_META, ROUTES_META, STATIC_META, SITE_URL, headTags, routeMeta, stopMeta, teamMeta, type PageMeta } from '../src/models/seo/pageMeta';
+import { HOME_META, MAP_META, PRIVATE_PREFIXES, ROUTES_META, STATIC_META, SITE_URL, headTags, metaForPath, routeMeta, stopMeta, teamMeta, type PageMeta } from '../src/models/seo/pageMeta';
 import { TEAM } from '../src/models/data/team';
 import { TRANSIT_DATA_DATE } from '../src/models/data/transitDataDate';
 import { SITE } from '../src/models/data/legal';
@@ -86,6 +90,18 @@ for (const s of SERVED_STOPS) {
 for (const p of ['/about', '/privacy', '/terms']) write(STATIC_META[p], render(p));
 write(STATIC_META['/connect']);
 for (const person of TEAM) write(teamMeta(person));
+
+/* The app-only pages: just the app, kept out of search results (vercel.json sends /admin/* to /admin) */
+for (const p of PRIVATE_PREFIXES) write(metaForPath(p)!);
+
+/* Any other address: build/404.html, which Vercel serves with a 404 status. The app still starts and
+   shows its own "not found" page; this text is for crawlers and browsers without JavaScript. */
+write({ ...HOME_META, path: '/404', title: 'Page not found | Transit Regina', noindex: true, jsonLd: [] },
+    `<main data-prerender style="max-width:44rem;margin:0 auto;padding:3rem 1.25rem;font-family:Inter,system-ui,sans-serif">
+<h1>Page not found</h1>
+<p>The page you're looking for doesn't exist or has moved.</p>
+<p><a href="/map">Open the live map</a> · <a href="/routes">All Regina bus routes</a> · <a href="/">Homepage</a></p>
+</main>`);
 
 /* The sitemap: every page, with when its content last changed where we know it */
 const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

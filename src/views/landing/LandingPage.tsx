@@ -49,7 +49,9 @@ export default function LandingPage() {
                     className="flex items-center gap-2.5 no-underline px-4 py-2 rounded-full transition-all duration-300 hover:scale-105"
                 >
                     <img
-                        src="/og-logo-gif.gif"
+                        src="/logo-animated.webp"
+                        width={80}
+                        height={80}
                         alt="Transit Regina"
                         className="w-20 h-20 rounded-xl object-cover"
                     />

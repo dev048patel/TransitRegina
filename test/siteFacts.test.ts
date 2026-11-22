@@ -146,3 +146,10 @@ test('each team page is pre-rendered with its name as the one H1 and the portfol
     assert.equal(h1s(connect).length, 1);
     for (const p of TEAM) assert.ok(connect.includes(`href="/connect/${p.slug}"`));
 });
+
+test('the About page explains how the live data and timetables work, and links to both founders', async () => {
+    const about = JSON.stringify((await import('../src/models/data/legal')).LEGAL_PAGES.about);
+    for (const p of TEAM) assert.ok(about.includes(`](/connect/${p.slug})`), p.slug);
+    assert.match(about, /How the live map works/);
+    assert.match(about, /How the timetables work/);
+});

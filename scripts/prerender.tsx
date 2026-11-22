@@ -10,7 +10,8 @@
  browser. The app then starts as usual and takes over the page.
 
  Files are written as build/<path>.html; vercel.json's cleanUrls serves them at /<path>.
- It also writes build/sitemap.xml listing every page. A page's lastmod is the day its content last
+ It also writes the sitemaps: build/sitemap.xml, an index of sitemap-pages.xml, sitemap-routes.xml and
+ sitemap-stops.xml. A page's lastmod is the day its content last
  changed: the transit data for the route and stop pages (TRANSIT_DATA_DATE, set by build:transit-data),
  the policy date for Privacy and Terms. Pages with no such date get none, rather than the build date,
  which would claim every page changed on every deploy and teach search engines to ignore lastmod.
@@ -106,7 +107,9 @@ write({ ...HOME_META, path: '/404', title: 'Page not found | Transit Regina', no
 <p><a href="/map">Open the live map</a> · <a href="/routes">All Regina bus routes</a> · <a href="/">Homepage</a></p>
 </main>`);
 
-/* The sitemap: every page, with when its content last changed where we know it */
+/* The sitemaps: one per kind of page, so Search Console shows how many of each are indexed (are the
+   stop pages the ones left out?), and /sitemap.xml lists the three. Each page has when its content last
+   changed where we know it; no priority or changefreq, which Google ignores. */
 const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const policyDate = new Date(SITE.policyDate);   // "October 17, 2026", read as local midnight
 if (Number.isNaN(policyDate.getTime())) throw new Error(`prerender: can't read SITE.policyDate "${SITE.policyDate}"`);
@@ -114,11 +117,29 @@ const lastmod = (p: string): string | null =>
     p === '/routes' || p.startsWith('/routes/') || p.startsWith('/stops/') ? TRANSIT_DATA_DATE
         : p === '/privacy' || p === '/terms' ? isoDate(policyDate)
             : null;
-const priority = (p: string) => (p === '/' ? '1.0' : p === '/routes' ? '0.9' : p.startsWith('/routes/') ? '0.8' : p.startsWith('/stops/') ? '0.6' : '0.5');
-fs.writeFileSync(path.join(out, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>
+const SITEMAPS: { file: string; holds: (p: string) => boolean }[] = [
+    { file: 'sitemap-pages.xml', holds: p => !p.startsWith('/routes/') && !p.startsWith('/stops/') },
+    { file: 'sitemap-routes.xml', holds: p => p.startsWith('/routes/') },
+    { file: 'sitemap-stops.xml', holds: p => p.startsWith('/stops/') },
+];
+const index: { file: string; lastmod: string | null }[] = [];
+for (const { file, holds } of SITEMAPS) {
+    const pages = written.filter(m => holds(m.path));
+    fs.writeFileSync(path.join(out, file), `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${written.map(m => `  <url><loc>${SITE_URL}${m.path === '/' ? '/' : m.path}</loc>${lastmod(m.path) ? `<lastmod>${lastmod(m.path)}</lastmod>` : ''}<priority>${priority(m.path)}</priority></url>`).join('\n')}
+${pages.map(m => `  <url><loc>${SITE_URL}${m.path === '/' ? '/' : m.path}</loc>${lastmod(m.path) ? `<lastmod>${lastmod(m.path)}</lastmod>` : ''}</url>`).join('\n')}
 </urlset>
 `);
+    const dates = pages.map(m => lastmod(m.path)).filter((d): d is string => !!d).sort();
+    index.push({ file, lastmod: dates.at(-1) ?? null });
+}
+for (const m of written) {
+    if (SITEMAPS.filter(s => s.holds(m.path)).length !== 1) throw new Error(`prerender: ${m.path} must be in exactly one sitemap`);
+}
+fs.writeFileSync(path.join(out, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${index.map(s => `  <sitemap><loc>${SITE_URL}/${s.file}</loc>${s.lastmod ? `<lastmod>${s.lastmod}</lastmod>` : ''}</sitemap>`).join('\n')}
+</sitemapindex>
+`);
 
-console.log(`prerender: ${written.length} pages (${ROUTES.length} routes, ${stops} stops) and sitemap.xml in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+console.log(`prerender: ${written.length} pages (${ROUTES.length} routes, ${stops} stops), sitemap.xml and ${SITEMAPS.length} sitemaps in ${((Date.now() - started) / 1000).toFixed(1)}s`);

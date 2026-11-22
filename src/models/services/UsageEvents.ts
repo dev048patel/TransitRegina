@@ -41,6 +41,7 @@ export const CLIENT_EVENTS: Record<string, Record<string, Field>> = {
     // One per visit: the device and where the rider came from (no personal data)
     session_start: { browser: s(20), os: s(20), screen: s(12), lang: s(10), source: s(60), campaign: s(60), installed: ['yes', 'no'], connection: s(10), version: s(20) },
     // How fast the app is for riders: Core Web Vitals, and our own timings
+    // FID is still accepted from tabs opened before the INP release; new ones send INP
     vitals: { name: ['LCP', 'CLS', 'INP', 'FID', 'FCP', 'TTFB'], value: 'num', rating: ['good', 'needs-improvement', 'poor'] },
     timing: { what: ['map_load', 'plan_routes', 'stop_board', 'live_feed'], ms: 'int' },
     // What went wrong on riders' devices

@@ -5,7 +5,7 @@
 
    Also, once per visit: the visit id (random, a new one after 30 minutes idle), the device and where the rider came
    from; how fast pages load (Core Web Vitals); and any crash, so admins hear about bugs on phones they don't have. */
-import { getCLS, getFCP, getFID, getLCP, getTTFB, type Metric } from 'web-vitals';
+import { onCLS, onFCP, onINP, onLCP, onTTFB, type Metric } from 'web-vitals';
 import { supabase } from '../lib/supabase';
 import { visitorDayHeader } from '../lib/visitorDay';
 
@@ -111,13 +111,10 @@ if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(true); });
     window.addEventListener('pagehide', () => flush(true));
 
-    // How fast pages are for riders (Google's Core Web Vitals), rated by Google's published thresholds
-    const LIMITS: Record<string, [number, number]> = { LCP: [2500, 4000], FCP: [1800, 3000], CLS: [0.1, 0.25], TTFB: [800, 1800], FID: [100, 300] };
-    const report = (m: Metric) => {
-        const [good, poor] = LIMITS[m.name] ?? [Infinity, Infinity];
-        track('vitals', { name: m.name, value: m.value, rating: m.value <= good ? 'good' : m.value <= poor ? 'needs-improvement' : 'poor' });
-    };
-    getCLS(report); getFCP(report); getFID(report); getLCP(report); getTTFB(report);
+    // How fast pages are for riders: Google's Core Web Vitals (LCP, INP, CLS) and two early signs (FCP,
+    // TTFB), rated by the library against Google's published thresholds. INP replaced FID in March 2024.
+    const report = (m: Metric) => track('vitals', { name: m.name, value: m.value, rating: m.rating });
+    onCLS(report); onFCP(report); onINP(report); onLCP(report); onTTFB(report);
 
     // Crashes on riders' devices: the message and where, a few per page (a loop of errors must not flood)
     let errors = 0;

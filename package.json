@@ -34,7 +34,7 @@
     "typescript": "^5.9.3",
     "use-places-autocomplete": "^4.0.1",
     "web-push": "^3.6.7",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^6.2.3"
   },
   "scripts": {
     "start": "vite",
@@ -44,6 +44,7 @@
     "build": "vite build && tsx scripts/prerender.tsx",
     "serve": "vite preview",
     "build:transit-data": "node scripts/build-transit-data.mjs",
+    "indexnow": "node scripts/indexnow.mjs",
     "build:walk-graph": "node scripts/build-walk-graph.mjs",
     "dev:server": "cross-env TS_NODE_PROJECT=tsconfig.server.json nodemon src/server.ts"
   },

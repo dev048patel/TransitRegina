@@ -18,7 +18,7 @@ export default class ErrorBoundary extends React.Component<{ children: React.Rea
         if (!this.state.failed) return this.props.children;
         return (
             <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center" style={{ background: '#F7F8FA' }}>
-                <img src="/og-logo-gif.gif" alt="Transit Regina" className="w-16 h-16 rounded-xl object-cover mb-6" />
+                <img src="/logo-animated.webp" alt="Transit Regina" width={64} height={64} className="w-16 h-16 rounded-xl object-cover mb-6" />
                 <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">Something went wrong</h1>
                 <p className="mt-3 max-w-md text-slate-600">The page hit a problem it couldn't recover from. Reloading usually fixes it.</p>
                 <button

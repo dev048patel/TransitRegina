@@ -9,7 +9,14 @@
  takes over the page.
 
  Files are written as build/<path>.html; vercel.json's cleanUrls serves them at /<path>.
- It also writes build/sitemap.xml listing every page.
+ It also writes build/sitemap.xml listing every page. A page's lastmod is the day its content last
+ changed: the transit data for the route and stop pages (TRANSIT_DATA_DATE, set by build:transit-data),
+ the policy date for Privacy and Terms. Pages with no such date get none, rather than the build date,
+ which would claim every page changed on every deploy and teach search engines to ignore lastmod.
+
+ The app-only pages (sign-in, profile, admin: PRIVATE_PREFIXES in pageMeta.ts) get a noindex page each, so
+ they open directly. Everything else that isn't a file here gets build/404.html with a real 404 status
+ (Vercel serves it), instead of the homepage, which made unknown addresses look like copies of it.
 */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,8 +26,10 @@ import { StaticRouter, Routes, Route } from 'react-router';
 import { RoutesIndexPage, RoutePage, StopPage } from '../src/views/directory/DirectoryPages';
 import LegalPage from '../src/views/LegalPage';
 import { ROUTES, SERVED_STOPS, stopInfo } from '../src/models/services/TransitDirectory';
-import { HOME_META, MAP_META, ROUTES_META, STATIC_META, SITE_URL, headTags, routeMeta, stopMeta, teamMeta, type PageMeta } from '../src/models/seo/pageMeta';
+import { HOME_META, MAP_META, PRIVATE_PREFIXES, ROUTES_META, STATIC_META, SITE_URL, headTags, metaForPath, routeMeta, stopMeta, teamMeta, type PageMeta } from '../src/models/seo/pageMeta';
 import { TEAM } from '../src/models/data/team';
+import { TRANSIT_DATA_DATE } from '../src/models/data/transitDataDate';
+import { SITE } from '../src/models/data/legal';
 
 const out = path.resolve(process.cwd(), 'build');   // run from the project root, as npm scripts are
 const template = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
@@ -82,12 +91,30 @@ for (const p of ['/about', '/privacy', '/terms']) write(STATIC_META[p], render(p
 write(STATIC_META['/connect']);
 for (const person of TEAM) write(teamMeta(person));
 
-/* The sitemap: every page, with today's date as when it last changed */
-const today = new Date().toISOString().slice(0, 10);
+/* The app-only pages: just the app, kept out of search results (vercel.json sends /admin/* to /admin) */
+for (const p of PRIVATE_PREFIXES) write(metaForPath(p)!);
+
+/* Any other address: build/404.html, which Vercel serves with a 404 status. The app still starts and
+   shows its own "not found" page; this text is for crawlers and browsers without JavaScript. */
+write({ ...HOME_META, path: '/404', title: 'Page not found | Transit Regina', noindex: true, jsonLd: [] },
+    `<main data-prerender style="max-width:44rem;margin:0 auto;padding:3rem 1.25rem;font-family:Inter,system-ui,sans-serif">
+<h1>Page not found</h1>
+<p>The page you're looking for doesn't exist or has moved.</p>
+<p><a href="/map">Open the live map</a> · <a href="/routes">All Regina bus routes</a> · <a href="/">Homepage</a></p>
+</main>`);
+
+/* The sitemap: every page, with when its content last changed where we know it */
+const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const policyDate = new Date(SITE.policyDate);   // "October 17, 2026", read as local midnight
+if (Number.isNaN(policyDate.getTime())) throw new Error(`prerender: can't read SITE.policyDate "${SITE.policyDate}"`);
+const lastmod = (p: string): string | null =>
+    p === '/routes' || p.startsWith('/routes/') || p.startsWith('/stops/') ? TRANSIT_DATA_DATE
+        : p === '/privacy' || p === '/terms' ? isoDate(policyDate)
+            : null;
 const priority = (p: string) => (p === '/' ? '1.0' : p === '/routes' ? '0.9' : p.startsWith('/routes/') ? '0.8' : p.startsWith('/stops/') ? '0.6' : '0.5');
 fs.writeFileSync(path.join(out, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${written.map(m => `  <url><loc>${SITE_URL}${m.path === '/' ? '/' : m.path}</loc><lastmod>${today}</lastmod><priority>${priority(m.path)}</priority></url>`).join('\n')}
+${written.map(m => `  <url><loc>${SITE_URL}${m.path === '/' ? '/' : m.path}</loc>${lastmod(m.path) ? `<lastmod>${lastmod(m.path)}</lastmod>` : ''}<priority>${priority(m.path)}</priority></url>`).join('\n')}
 </urlset>
 `);
 

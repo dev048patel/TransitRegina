@@ -110,8 +110,10 @@ export function teamMeta(p: { slug: string; name: string; title: string; focus: 
     };
 }
 
-/* Pages that are part of the app, not the site: kept out of search results */
-const PRIVATE_PREFIXES = ['/login', '/signup', '/forgot-password', '/reset-password', '/profile', '/two-step', '/admin'];
+/* Pages that are part of the app, not the site: kept out of search results.
+   scripts/prerender.tsx writes a noindex page for each, so they open while any other unknown address
+   gets a real 404; vercel.json sends everything under /admin/ to the /admin page. */
+export const PRIVATE_PREFIXES = ['/login', '/signup', '/forgot-password', '/reset-password', '/profile', '/two-step', '/admin'];
 
 /** The head for pages that do not set their own (the directory pages and "not found" do) */
 export function metaForPath(pathname: string, team: { slug: string; name: string; title: string; focus: string; pitch: string }[] = []): PageMeta | null {

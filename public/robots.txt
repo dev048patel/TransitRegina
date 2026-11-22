@@ -1,5 +1,8 @@
 # https://www.robotstxt.org/robotstxt.html
+# Content-Signal (https://contentsignals.org): search engines may index the site and AI tools may use it
+# to answer questions. Whether it may be used to train AI models is left unsaid (add ai-train=yes or no).
 User-agent: *
+Content-Signal: search=yes, ai-input=yes
 Disallow: /admin
 
 Sitemap: https://transitregina.ca/sitemap.xml

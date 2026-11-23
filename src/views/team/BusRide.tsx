@@ -15,6 +15,7 @@ import type { CharacterTheme } from '../../models/data/characterThemes';
 import type { SkillArea, TeamMember } from '../../models/data/team';
 import type { createBusScene } from './busScene';
 import BusGame, { type Passenger } from './BusGame';
+import FlowSteps from './FlowSteps';
 
 export interface RideItem {
     title: string;
@@ -29,6 +30,8 @@ export interface RideItem {
     /** The hardest part, and how it was solved */
     challenge?: string;
     areas?: SkillArea[];
+    /** The path the data takes, step by step */
+    flow?: string[];
     tags?: string[];
     stat?: { value: string; label: string };
     link?: string;
@@ -78,11 +81,12 @@ function SeatCard({ item, kicker, seat, theme, tail }: { item: RideItem; kicker:
                         <div>
                             <span className={label}>How it works</span>
                             <p className="text-sm sm:text-[15px] text-slate-700 leading-relaxed">{item.how}</p>
+                            {item.flow && <FlowSteps steps={item.flow} color={theme.primary} soft={theme.primarySoft} />}
                         </div>
                     )}
                     {item.challenge && (
                         <div className="rounded-xl border-2 border-dashed border-slate-300 px-3 py-2">
-                            <span className={label}>The hardest part</span>
+                            <span className={label}>The tricky part</span>
                             <p className="text-sm sm:text-[15px] text-slate-700 leading-relaxed">{item.challenge}</p>
                         </div>
                     )}
@@ -258,11 +262,11 @@ export default function BusRide({ person, theme, zones }: { person: TeamMember; 
                     {!started && !playing && (
                         <motion.div className="absolute inset-x-0 bottom-[7%] px-6 text-center pointer-events-none" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}>
                             <p className="text-sm font-bold uppercase tracking-[0.3em] text-amber-400 mb-3">{firstName}'s route</p>
-                            <h2 className="text-3xl sm:text-5xl font-black text-white mb-2 drop-shadow-[0_4px_18px_rgba(0,0,0,0.8)]">Everything I've built is on this bus</h2>
-                            <p className="text-base sm:text-lg text-white/80 mb-4 drop-shadow">It's 4 minutes away and {firstName} is driving. Every passenger is something we built: say hi.</p>
+                            <h2 className="text-3xl sm:text-5xl font-black text-white mb-2 drop-shadow-[0_4px_18px_rgba(0,0,0,0.8)]">How it all works, one seat at a time</h2>
+                            <p className="text-base sm:text-lg text-white/80 mb-4 drop-shadow">Each passenger walks you through one part of the system or one place {firstName} has worked: the problem, how it works, the tricky part and how it turned out.</p>
                             <div className="flex flex-wrap items-center justify-center gap-3 mb-4 pointer-events-auto">
                                 <button onClick={() => setPlaying(true)} disabled={!ready} className="inline-flex items-center gap-2 rounded-full border-[3px] border-slate-900 bg-amber-400 px-5 py-2.5 text-base font-black text-slate-900 shadow-[4px_4px_0_#0f172a] hover:-translate-y-0.5 transition-transform disabled:opacity-60">
-                                    <Gamepad2 size={20} /> Play: meet everyone on board
+                                    <Gamepad2 size={20} /> Play: take a seat and ask around
                                 </button>
                                 <button onClick={() => setListOpen(true)} className="inline-flex items-center gap-2 rounded-full border-2 border-white/40 bg-black/40 px-4 py-2 text-sm font-bold text-white backdrop-blur hover:bg-black/60">
                                     <List size={16} /> Short on time? See it all as a list

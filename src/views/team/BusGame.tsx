@@ -22,7 +22,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, BookOpen, Check, ClipboardCopy, Compass, Play, GithubIcon, LinkedinIcon, List, Mail, MessageCircle, Sparkles, Trophy, X } from 'lucide-react';
 import type { CharacterTheme } from '../../models/data/characterThemes';
-import { SKILL_AREAS, type TeamMember } from '../../models/data/team';
+import { BUILD_NUMBERS, SKILL_AREAS, type TeamMember } from '../../models/data/team';
+import FlowSteps from './FlowSteps';
 import type { Emote } from './animeCharacter';
 import { useRideDiscoveries } from '../../controllers/useRideDiscoveries';
 import type { createBusScene, GameState, Talker } from './busScene';
@@ -31,7 +32,7 @@ import type { RideItem } from './BusRide';
 export interface Passenger { item: RideItem; zone: string; seat: number }
 type Scene = ReturnType<typeof createBusScene>;
 /** One thing you can ask someone; `card` answers also show the result, tools and links */
-type Question = { key: string; icon: string; label: string; text: string; card?: boolean; diagram?: boolean; emote?: Emote };
+type Question = { key: string; icon: string; label: string; text: string; card?: boolean; diagram?: boolean; stack?: boolean; numbers?: boolean; emote?: Emote };
 type Toast = { kind: 'met' | 'badge'; text: string };
 
 const DRIVER_ID = '__driver';
@@ -76,16 +77,16 @@ function SystemDiagram({ color }: { color: string }) {
         </>
     );
     return (
-        <svg viewBox="0 0 600 200" className="mt-2 w-full max-w-[600px]" role="img" aria-label="Diagram: the rider's phone talks to our Express API, which uses Supabase, the TransitLive feed, Twilio and web push">
+        <svg viewBox="0 0 600 200" className="mt-2 w-full max-w-[600px]" role="img" aria-label="Diagram: the rider's browser (React on Vercel) calls our Express API on Railway, which uses the TransitLive feed, Supabase and Twilio with web push">
             {flow('M120 100 L240 100', 1.4, color)}
             {flow('M360 100 L470 40', 1.8, '#f59e0b')}
             {flow('M360 100 L470 100', 1.6, '#10b981')}
             {flow('M360 100 L470 160', 2.2, '#ef4444')}
-            {box(10, 77, 110, "Rider's phone", 'React 19 · Google Maps', '#fef3c7')}
-            {box(240, 77, 120, 'Our API', 'Express 5 · auth · rate limits')}
-            {box(470, 17, 125, 'TransitLive feed', 'live buses every 1.5 s')}
-            {box(470, 77, 125, 'Supabase', 'Postgres · row-level security')}
-            {box(470, 137, 125, 'Twilio · Web Push', 'reminders')}
+            {box(10, 77, 110, "Rider's browser", 'React 19 · Vercel', '#fef3c7')}
+            {box(240, 77, 120, 'Our API', 'Express 5 · Railway')}
+            {box(470, 17, 125, 'TransitLive feed', 'shared · ≤ 2 req/s')}
+            {box(470, 77, 125, 'Supabase', 'Postgres · Auth · RLS')}
+            {box(470, 137, 125, 'Twilio · Web Push', 'texts and push')}
         </svg>
     );
 }
@@ -137,8 +138,9 @@ export default function BusGame({ scene, people, person, theme, onExit, onList }
             const study = [person.education, ...person.honours.map(h => h.name), ...person.certifications.map(c => `${c.name} (${c.issuer})`)].filter(Boolean).join(' · ');
             return [
                 { key: 'who', icon: '👋', label: 'Who are you?', text: person.pitch, emote: 'point' as Emote },
-                ...(person.about[0] ? [{ key: 'why', icon: '🚌', label: 'Why this app?', text: person.about[0], emote: 'think' as Emote }] : []),
-                { key: 'system', icon: '🧩', label: 'How it all fits together', text: 'Your phone talks only to our API. The API checks who you are, then fetches live buses, saved data and reminders on your behalf, so no secret ever reaches the browser.', diagram: true, emote: 'explain' as Emote },
+                { key: 'stack', icon: '🧰', label: 'Tech stack', text: 'The tools behind it, layer by layer.', stack: true, emote: 'explain' as Emote },
+                { key: 'system', icon: '🧩', label: 'System architecture', text: 'The browser signs in with Supabase Auth and sends that JWT to our Express API with each request. The API verifies it, applies rate limits, and calls TransitLive, Postgres, Twilio and Web Push with keys that never reach the browser. Live positions are fetched once and shared, so the city\'s feed sees at most two requests a second however many riders are watching. Text alerts run as a separate service, so a crash there cannot take the map down.', diagram: true, emote: 'explain' as Emote },
+                { key: 'numbers', icon: '📊', label: 'The project in numbers', text: 'The project so far, from the repository and its test suites.', numbers: true, emote: 'cheer' as Emote },
                 ...(study ? [{ key: 'study', icon: '🎓', label: 'Studies & awards', text: study, emote: 'cheer' as Emote }] : []),
                 { key: 'contact', icon: '✉️', label: "Let's talk", text: `I would love to hear from you. Pick whichever is easiest.`, card: true, emote: 'point' as Emote },
             ];
@@ -147,16 +149,16 @@ export default function BusGame({ scene, people, person, theme, onExit, onList }
         const list: Question[] = [];
         if (item.problem) list.push({ key: 'problem', icon: '💡', label: 'The problem', text: item.problem, emote: 'think' });
         if (item.did) list.push({ key: 'did', icon: '🛠️', label: `What ${firstName} did`, text: item.did, emote: 'point' });
-        else if (item.detail) list.push({ key: 'about', icon: '📖', label: 'Tell me more', text: item.detail, emote: 'explain' });
+        else if (item.detail) list.push({ key: 'about', icon: '📖', label: 'What it is', text: item.detail, emote: 'explain' });
         if (item.how) list.push({ key: 'how', icon: '⚙️', label: 'How it works', text: item.how, emote: 'explain' });
-        if (item.challenge) list.push({ key: 'challenge', icon: '🧗', label: 'The hard part', text: item.challenge, emote: 'think' });
+        if (item.challenge) list.push({ key: 'challenge', icon: '🧗', label: 'The tricky part', text: item.challenge, emote: 'think' });
         if (item.stat || item.tags?.length || item.link) {
-            list.push({ key: 'result', icon: '🏆', label: item.stat ? 'The result' : 'Built with', card: true, text: '', emote: item.stat ? 'cheer' : 'point' });
+            list.push({ key: 'result', icon: '🏆', label: item.stat ? 'How it turned out' : 'Built with', card: true, text: '', emote: item.stat ? 'cheer' : 'point' });
         }
         return list;
     }, [people, person, firstName]);
     /* What they say the moment you walk up: their hook */
-    const hookFor = (t: Talker) => t === 'driver' ? `Welcome aboard! I'm ${firstName}, and I drive this bus.` : people[t].item.hook || people[t].item.sub || people[t].item.detail || '';
+    const hookFor = (t: Talker) => t === 'driver' ? `Hi, I'm ${firstName}. Happy to walk you through the stack, the architecture or the numbers.` : people[t].item.hook || people[t].item.sub || people[t].item.detail || '';
     const questions = useMemo(() => (talk === null ? [] : questionsFor(talk)), [talk, questionsFor]);
     const answering = questions.find(q => q.key === view) ?? null;
     const wasAsked = (t: Talker, key: string) => asked.has(`${idOf(t)}::${key}`);
@@ -211,7 +213,8 @@ export default function BusGame({ scene, people, person, theme, onExit, onList }
         speak(q?.text ?? '');
         scene.setEmote(q?.emote ?? null);
     }, [talk, ask, idOf, questions, speak, scene]);
-    /* E asks the next question you have not asked yet; when there is nothing left, you say goodbye */
+    /* E (or Continue) moves the story on: the next part not heard yet; when there is nothing left, goodbye */
+    const nextPart = talk === null ? null : questions.find(q => !asked.has(`${idOf(talk)}::${q.key}`) && q.key !== view) ?? null;
     const advance = useCallback(() => {
         if (talk === null) return;
         const next = questions.find(q => !asked.has(`${idOf(talk)}::${q.key}`) && q.key !== view);
@@ -343,7 +346,7 @@ export default function BusGame({ scene, people, person, theme, onExit, onList }
         { id: 'driver', name: `Met ${firstName} at the wheel`, got: met.has(DRIVER_ID) },
         ...zones.map(z => ({ id: `zone:${z}`, name: `${z}: all met`, got: people.filter(p => p.zone === z).every(p => met.has(p.item.title)) })),
         { id: 'detective', name: 'Detective: asked someone everything', got: ['driver' as Talker, ...people.map((_, i) => i as Talker)].some(t => met.has(idOf(t)) && everythingAsked(t)) },
-        { id: 'engineer', name: 'Engineer at heart: heard 5 hard-part stories', got: challengesHeard >= 5 },
+        { id: 'engineer', name: 'Engineer at heart: heard 5 tricky parts', got: challengesHeard >= 5 },
         { id: 'all', name: 'Full ride: met everyone', got: found === total },
     ];
     const newlyEarned = achievements.filter(a => a.got && !badges.has(a.id)).map(a => a.id).join('|');
@@ -538,6 +541,27 @@ export default function BusGame({ scene, people, person, theme, onExit, onList }
                                                 <p className="text-[11px] font-black uppercase tracking-[0.16em] mb-1" style={{ color: theme.primary }}>{answering.icon} {answering.label}</p>
                                                 {answering.text && <p className="text-[15px] sm:text-lg leading-relaxed text-slate-800" aria-live="polite"><Reveal text={answering.text} /></p>}
                                                 {answering.diagram && <SystemDiagram color={theme.primary} />}
+                                                {answering.key === 'how' && talk !== 'driver' && people[talk].item.flow && <FlowSteps steps={people[talk].item.flow!} color={theme.primary} soft={theme.primarySoft} />}
+                                                {answering.stack && (
+                                                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                                        {(person.stack ?? [{ group: 'Skills', items: person.skills }]).map(g => (
+                                                            <div key={g.group} className="rounded-xl border-2 border-slate-900 bg-white px-3 py-2">
+                                                                <span className="block text-[10px] font-black uppercase tracking-[0.16em] mb-1" style={{ color: theme.primary }}>{g.group}</span>
+                                                                <div className="flex flex-wrap gap-1">{g.items.map(i => <span key={i} className="rounded-full border border-slate-300 px-2 py-0.5 text-xs font-bold text-slate-800">{i}</span>)}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {answering.numbers && (
+                                                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                        {BUILD_NUMBERS.map(n => (
+                                                            <div key={n.label} className="rounded-xl border-2 border-slate-900 px-3 py-2 shadow-[2px_2px_0_#0f172a]" style={{ background: theme.primarySoft }}>
+                                                                <div className="text-2xl font-black leading-none" style={{ color: theme.primaryDark }}><CountUp value={n.value} /></div>
+                                                                <div className="mt-1 text-[11px] font-bold text-slate-600 leading-tight">{n.label}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                                 {answering.card && (talk === 'driver' ? (
                                                     <div className="mt-2 flex flex-wrap gap-2">
                                                         <a href={person.linkedin} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-full border-2 border-slate-900 px-4 py-2 font-black text-white no-underline shadow-[2px_2px_0_#0f172a]" style={{ background: theme.primary }}><LinkedinIcon size={16} /> LinkedIn</a>
@@ -568,10 +592,17 @@ export default function BusGame({ scene, people, person, theme, onExit, onList }
                                             </motion.div>
                                         ) : (
                                             <motion.p key="pick" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm font-bold text-slate-400 pt-1">
-                                                Ask {talk === 'driver' ? firstName : 'them'} something below. Take your time: nothing moves on until you choose.
+                                                Press Continue to hear the story, or jump to any part below. Nothing moves on until you choose.
                                             </motion.p>
                                         )}
                                     </AnimatePresence>
+                                </div>
+
+                                {/* The story, one part after another; the parts below let you jump around */}
+                                <div className="mt-3 flex justify-end">
+                                    <button onClick={advance} className="inline-flex items-center gap-1.5 rounded-full border-2 border-slate-900 bg-amber-300 px-4 py-1.5 text-sm sm:text-base font-black text-slate-900 shadow-[2px_2px_0_#0f172a] hover:-translate-y-0.5 active:scale-95">
+                                        {nextPart ? <>Continue: {nextPart.label} <ArrowRight size={16} /></> : <>That's the story 👋</>}
+                                    </button>
                                 </div>
 
                                 {/* Questions: always here, always in the same place */}
@@ -591,7 +622,7 @@ export default function BusGame({ scene, people, person, theme, onExit, onList }
                                 </div>
                                 {!touch && (
                                     <p className="mt-2 text-right text-[11px] font-bold text-slate-400">
-                                        {key('1')}–{key(String(questions.length + 1))} ask · {key('E')} next question{tour !== null && <> · {key('N')} next stop</>} · {key('Esc')} close
+                                        {key('1')}–{key(String(questions.length + 1))} jump to a part · {key('E')} continue{tour !== null && <> · {key('N')} next stop</>} · {key('Esc')} close
                                     </p>
                                 )}
                             </div>
@@ -642,7 +673,7 @@ export default function BusGame({ scene, people, person, theme, onExit, onList }
                             <div className="mb-4 rounded-2xl border-2 border-slate-900 p-3">
                                 <div className="flex items-center justify-between mb-2">
                                     <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Skills map</span>
-                                    <span className="text-[11px] font-black text-slate-500">🧗 Hard-part stories heard: {challengesHeard} of {challengeTotal}</span>
+                                    <span className="text-[11px] font-black text-slate-500">🧗 Tricky parts heard: {challengesHeard} of {challengeTotal}</span>
                                 </div>
                                 <div className="space-y-1.5">
                                     {skillMap.map(a => (
@@ -705,7 +736,7 @@ export default function BusGame({ scene, people, person, theme, onExit, onList }
                         <div className={`w-[min(460px,94vw)] p-6 ${hud} !rounded-[24px]`}>
                             <p className="text-[11px] font-black uppercase tracking-[0.2em] mb-1" style={{ color: theme.primary }}>How to play</p>
                             <h3 className="text-2xl font-black text-slate-900 mb-3">Meet everyone on {firstName}'s bus</h3>
-                            <p className="text-slate-600 mb-4">Every passenger with a <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border-2 border-slate-900 bg-[#ffc21a] text-xs font-black">!</span> is something {firstName} built or a place they worked. Walk up, say hi, and ask what problem it solved, what {firstName} did and how it works.</p>
+                            <p className="text-slate-600 mb-4">Every passenger with a <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border-2 border-slate-900 bg-[#ffc21a] text-xs font-black">!</span> explains one part of the system or a place {firstName} has worked. Walk up, say hi, and press Continue to hear their story from the problem to how it turned out.</p>
                             <p className="text-sm font-bold text-slate-800 mb-3">Only have a minute? Press <span className="rounded-full border-2 border-slate-900 bg-amber-300 px-2 text-xs font-black">▶ Quick tour</span> and we will walk you to the highlights.</p>
                             <ul className="space-y-2 text-sm font-bold text-slate-800 mb-5">
                                 {touch ? (
@@ -739,7 +770,7 @@ export default function BusGame({ scene, people, person, theme, onExit, onList }
                         <motion.div className={`w-[min(480px,94vw)] p-6 text-center ${hud} !rounded-[24px]`} initial={{ scale: 0.8, rotate: -2 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 220, damping: 14 }}>
                             <Sparkles className="mx-auto mb-2" size={34} style={{ color: theme.primary }} />
                             <h3 className="text-2xl font-black text-slate-900 mb-2">You met everyone on board!</h3>
-                            <p className="text-slate-600 mb-5">That is everything {firstName} has built and everywhere they have worked. If you would like to talk about it for real:</p>
+                            <p className="text-slate-600 mb-5">That's the whole ride: how the system fits together, and where {firstName} has worked. If you would like to talk about any of it:</p>
                             <div className="flex flex-wrap justify-center gap-2 mb-3">
                                 <a href={person.linkedin} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-full border-2 border-slate-900 px-4 py-2 font-black text-white no-underline shadow-[2px_2px_0_#0f172a]" style={{ background: theme.primary }}><LinkedinIcon size={16} /> LinkedIn</a>
                                 {person.email && <a href={`mailto:${person.email}`} className="inline-flex items-center gap-2 rounded-full border-2 border-slate-900 bg-white px-4 py-2 font-black text-slate-900 no-underline shadow-[2px_2px_0_#0f172a]"><Mail size={16} /> Email</a>}
